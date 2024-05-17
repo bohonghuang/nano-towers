@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.10" tiledversion="1.10.2" orientation="orthogonal" renderorder="right-down" width="9" height="9" tilewidth="400" tileheight="400" infinite="0" nextlayerid="4" nextobjectid="24">
+ <tileset firstgid="1" source="tileset-1.tsx"/>
+ <layer id="1" name="ground" width="9" height="9">
+  <data encoding="csv">
+1,1,1,1,1,1,1,1,1,
+1,2,2,2,2,2,2,2,1,
+1,2,3,3,3,3,3,2,1,
+1,2,3,2,2,2,3,2,1,
+1,2,3,2,3,2,3,2,1,
+1,2,3,2,3,2,3,2,1,
+1,2,3,2,3,3,3,2,1,
+1,2,3,2,2,2,2,2,1,
+1,4,3,4,1,1,1,1,1
+</data>
+ </layer>
+ <objectgroup id="3" name="enemy">
+  <object id="23" name="path" x="1000" y="3400">
+   <polyline points="0,0 0,-2400 1600,-2400 1600,-800 800,-800 800,-1600"/>
+  </object>
+ </objectgroup>
+</map>

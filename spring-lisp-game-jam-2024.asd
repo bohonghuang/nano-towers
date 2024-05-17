@@ -7,5 +7,5 @@
   :bug-tracker "https://github.com/bohonghuang/spring-lisp-game-jam-2024/issues"
   :source-control (:git "https://github.com/bohonghuang/spring-lisp-game-jam-2024.git")
   :depends-on (#:alexandria #:eon)
-  :pathname "src/"
-  :components ((:file "package")))
+  :components ((:module "src"
+                :components ((:file "package")))))
