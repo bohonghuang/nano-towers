@@ -87,6 +87,108 @@
     (raylib:draw-cube position 1.0 0.25 1.0 (raylib:fade raylib:+white+ 0.5)))
   (call-next-method))
 
+(defstruct (game-scene-enemy (:include eon:scene3d-container)
+                             (:constructor %make-game-scene-enemy))
+  (type :slime :type symbol)
+  (speed 0.5 :type single-float)
+  (path nil)
+  (animations nil :type list))
+
+(defgeneric game-scene-enemy-type-asset (type))
+
+(defmethod game-scene-enemy-type-asset ((type symbol))
+  (list :model (game-asset (pathname (format nil "models/enemies/~A.glb" (string-downcase (symbol-name type)))))))
+
+(defun make-game-scene-enemy (&rest args &key (type :slime) &allow-other-keys)
+  (apply #'%make-game-scene-enemy
+         (destructuring-bind (&key model (model-animations model))
+             (game-scene-enemy-type-asset type)
+           (list* :content (list (eon:load-asset 'raylib:model model))
+                  :scale (raylib:vector3-scale (raylib:vector3-one) (/ 3.0))
+                  :animations (cobj:ccoerce (eon:load-asset 'raylib:model-animations model-animations) 'list)
+                  args))))
+
+(defun game-scene-enemy-model (enemy)
+  (first (game-scene-enemy-content enemy)))
+
+(defun (setf game-scene-enemy-model) (value enemy)
+  (setf (first (game-scene-enemy-content enemy)) value))
+
+(defun game-scene-enemy-active-animation (enemy)
+  (cobj:ccoerce (raylib:model-animation-name (first (game-scene-enemy-animations enemy))) 'string))
+
+(defun (setf game-scene-enemy-active-animation) (name enemy)
+  (rotatef
+   (first (game-scene-enemy-animations enemy))
+   (nth (position
+         name (game-scene-enemy-animations enemy)
+         :test #'string= :key (compose (rcurry #'cobj:ccoerce 'string) #'raylib:model-animation-name))
+        (game-scene-enemy-animations enemy)))
+  name)
+
+(declaim (ftype (function (single-float single-float) (values single-float)) absmin)
+         (inline absmin))
+(defun absmin (a b)
+  (if (< (abs a) (abs b)) a b))
+
+(define-modify-macro absminf (value) absmin)
+
+(defun game-scene-enemy-updater (enemy)
+  (with-accessors ((path game-scene-enemy-path)) enemy
+    (lambda ()
+      (when-let ((target (first path)))
+        (etypecase target
+          (raylib:vector3
+           (let ((position (game-scene-enemy-position enemy))
+                 (rotation (game-scene-enemy-rotation enemy)))
+             (clet* ((offset (raylib:vector3-subtract target position))
+                     (direction (raylib:vector3-normalize offset))
+                     (delta (raylib:vector3-scale direction (* (game-scene-enemy-speed enemy) (eon:game-loop-delta-time)))))
+               (declare (dynamic-extent offset direction delta))
+               (absminf (raylib:vector3-x delta) (raylib:vector3-x offset))
+               (absminf (raylib:vector3-y delta) (raylib:vector3-y offset))
+               (absminf (raylib:vector3-z delta) (raylib:vector3-z offset))
+               (raylib:%vector3-add (& position) (& position) (& delta))
+               (if (< (abs (+ (raylib:vector3-dot-product direction eon::+vector3-unit-z+) 1.0)) single-float-epsilon)
+                   (raylib:%quaternion-from-axis-angle (& rotation) (& eon::+vector3-unit-y+) (eon::degree-radian 180.0))
+                   (raylib:%quaternion-from-vector3-to-vector3
+                    (& rotation)
+                    (& eon::+vector3-unit-z+)
+                    (& direction)))
+               (when (< (raylib:vector3-distance position target) single-float-epsilon)
+                 (pop path)))))
+          (function (funcall (pop path)))))
+      path)))
+
+(declaim (ftype (function (non-negative-fixnum &optional single-float) (values non-negative-fixnum)) game-loop-counter))
+(defun game-loop-counter (max &optional (speed 60.0))
+  (values (floor (mod (* (eon:game-loop-time) (coerce speed 'double-float)) (coerce max 'double-float)))))
+
+(defmethod eon:scene3d-draw ((enemy game-scene-enemy) position origin scale rotation tint)
+  (let ((animation (first (game-scene-enemy-animations enemy))))
+    (raylib:update-model-animation
+     (game-scene-enemy-model enemy) animation
+     (game-loop-counter (raylib:model-animation-frame-count animation))))
+  (call-next-method))
+
+(defun game-scene-map-enemy-paths (map)
+  (mapcar
+   (lambda (object)
+     (mapcar
+      (lambda (point)
+        (raylib:vector3-add
+         (raylib:make-vector3
+          :x (/ (coerce (tiled:object-x object) 'single-float) (coerce +tile-width+ 'single-float))
+          :y 0.0
+          :z (/ (coerce (tiled:object-y object) 'single-float) (coerce +tile-height+ 'single-float)))
+         (raylib:make-vector3
+          :x (/ (coerce (car point) 'single-float) (coerce +tile-width+ 'single-float))
+          :y 0.0
+          :z (/ (coerce (cdr point) 'single-float) (coerce +tile-height+ 'single-float)))))
+      (tiled:polyline-points object)))
+   (tiled:object-group-objects
+    (find "enemy" (tiled:map-layers map) :key #'tiled:layer-name :test #'string=))))
+
 (defun main ()
   (raylib:set-config-flags (cffi:foreign-bitfield-value 'raylib:config-flags '(:window-resizable)))
   (raylib:with-window ("Spring Lisp Game Jam 2024" ((* +viewport-width+ 2) (* +viewport-height+ 2)))
@@ -125,5 +227,18 @@
                          (eon:scene2d-focus-manager-handle-key focus-manager key)
                          (select-tower (eon::scene2d-focusable-content (eon:scene2d-focus-manager-focused focus-manager))))
                         (:b (return))))))
+        (let ((path (random-elt (game-scene-map-enemy-paths map))))
+          (eon:add-game-loop-hook
+           (lambda ()
+             (push
+              (let ((enemy (make-game-scene-enemy
+                            :position (first path)
+                            :type :dragon
+                            :path (rest path))))
+                (eon:add-game-loop-hook (game-scene-enemy-updater enemy) :after #'identity)
+                (setf (game-scene-enemy-active-animation enemy) "Dragon_Flying")
+                enemy)
+              (game-scene-screen-enemies screen)))
+           :after nil))
         (setf (eon:current-screen) screen))
       (eon:do-screen-loop (eon:make-fit-viewport :width +viewport-width+ :height +viewport-height+)))))
