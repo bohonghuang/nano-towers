@@ -113,7 +113,8 @@
                       (3 . "towerRound_sampleF")))))
 
 (defun game-scene-tower-type-level-asset (type level)
-  (list :model (game-asset (format nil "models/towers/~A.glb" (assoc-value (getf (assoc-value *tower-types* type) :model) level)))))
+  (when-let ((model-name (assoc-value (getf (assoc-value *tower-types* type) :model) level)))
+    (list :model (game-asset (format nil "models/towers/~A.glb" model-name)))))
 
 (defun make-game-scene-tower (&rest args &key (model nil) &allow-other-keys)
   (apply #'%make-game-scene-tower :content (list model) (remove-from-plist args :model)))
@@ -130,7 +131,7 @@
             (game-scene-tower-type-level-asset
              (game-scene-tower-type tower)
              (game-scene-tower-level tower))
-          (eon:load-asset 'raylib:model model))))
+          (when model (eon:load-asset 'raylib:model model)))))
 
 (defmethod eon:scene3d-draw ((tower game-scene-tower) position origin scale rotation tint)
   (when (game-scene-tower-selectedp tower)
@@ -372,7 +373,7 @@
                              (let* ((operations (append
                                                  (cond
                                                    ((null (game-scene-tower-type selected-tower)) '(build))
-                                                   ((< (game-scene-tower-level selected-tower) 3) '(upgrade)))
+                                                   ((< (game-scene-tower-level selected-tower) 3) '(upgrade demolish)))
                                                  '(cancel)))
                                     (select-box (eon:scene2d-construct
                                                  (eon:select-box
@@ -440,6 +441,19 @@
                                                 (incf (game-scene-tower-level selected-tower))
                                                 (game-scene-tower-model-update-model selected-tower))
                                               (await (promise-confirm-message "WARNING" "You don't have enough money to upgrade this tower!" ui-group))))))
+                                     (demolish
+                                      (let ((refund (let* ((level-cost (getf (assoc-value *tower-types* (game-scene-tower-type selected-tower)) :cost))
+                                                           (end (position (game-scene-tower-level selected-tower) level-cost :key #'car)))
+                                                      (floor (reduce #'+ (subseq level-cost 0 (1+ end)) :key #'cdr) 2))))
+                                        (when (await
+                                               (promise-yes-or-no-p
+                                                "CONFIRMATION"
+                                                (format nil "Do you want to demolish this tower to receive $~D?" refund)
+                                                ui-group))
+                                          (incf money refund)
+                                          (setf (game-scene-tower-level selected-tower) 0
+                                                (game-scene-tower-type selected-tower) nil)
+                                          (game-scene-tower-model-update-model selected-tower))))
                                      (cancel))))))))))))
         (let ((path (random-elt (game-scene-map-enemy-paths map))))
           (eon:add-game-loop-hook
