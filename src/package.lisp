@@ -49,13 +49,6 @@
                                               :up (raylib:make-vector3 :x 0.0 :y 1.0 :z 0.0)
                                               :fovy (/ 0.03) :projection #.(cffi:foreign-enum-value 'raylib:camera-projection :perspective)))
 
-(defun game-scene-camera-look-at (camera target)
-  (let ((tween (ute:start (ute:tween :from (#.(camera-3d-parameters-form 'camera) #.(camera-3d-parameters-form 'camera)) :duration 0.2))))
-    (let ((offset (raylib:vector3-subtract target (raylib:camera-target camera))))
-      (setf (raylib:camera-target camera) target
-            (raylib:camera-position camera) (raylib:vector3-add (raylib:camera-position camera) offset)))
-    (ute::base-tween-update tween single-float-epsilon)))
-
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defconstant +viewport-width+ 640)
   (defconstant +viewport-height+ 384))
@@ -77,14 +70,66 @@
                                          :children ((eon:scene2d-label :string "Money: ")
                                                     (eon:scene2d-label :string "0" :name label-money)))))))))
 
-(defstruct game-scene-screen
+(defstruct (game-scene-screen (:constructor %make-game-scene-screen))
   (camera (raylib:copy-camera +camera-default+) :type raylib:camera-3d)
+  (light-camera (raylib:make-camera) :type raylib:camera-3d)
+  (shadow (eon:make-shadow-map-renderer) :type eon:shadow-map-renderer)
+  (shader (eon:load-asset 'raylib:shader (game-asset #P"scene")) :type raylib:shader)
+  (shader-uniforms (make-game-scene-screen-shader-uniforms) :type cobj:cobject)
   (map-renderer (eon:tiled-map-renderer (tiled:load-map (game-asset #P"maps/map-1.tmx"))) :type eon:tiled-renderer)
   (tower-base-focus-manager (eon:make-scene2d-focus-manager) :type eon:scene2d-focus-manager)
   (ui (make-game-scene-ui) :type eon:scene2d-constructed)
   (-money 0 :type non-negative-fixnum)
   (towers nil :type list)
   (enemies nil :type list))
+
+(defvar *game-scene-screen*)
+
+(defvar *game-scene-shader-uniforms-shadow-map*)
+
+(cobj:define-global-cobject +light-position-default+ (raylib:make-vector3 :x -1.0 :y 4.0 :z 2.0))
+
+(eon:define-shaderable-uniforms game-scene-screen
+  ("colDiffuse" raylib:+white+ :type raylib:color)
+  ("colEmission" raylib:+black+ :type raylib:color)
+  ("colAmbient" (raylib:color-brightness raylib:+white+ -0.5) :type raylib:color)
+  ("colSpecular" raylib:+black+ :type raylib:color)
+  ("colLight" raylib:+lightgray+ :type raylib:color)
+  ("lightVector" (raylib:vector3-negate (raylib:vector3-normalize +light-position-default+)) :type raylib:vector3)
+  ("shadowLightMatrix" (raylib:make-matrix) :type raylib:matrix)
+  ("shadowIntensity" (/ 3.0) :type single-float)
+  ("shadowMap" *game-scene-shader-uniforms-shadow-map* :type raylib:texture))
+
+(cobj:define-global-cobject +shadow-light-camera-default+
+    (raylib:make-camera-3d :position +light-position-default+
+                           :target (raylib:make-vector3 :x 0.0 :y 0.0 :z 0.0)
+                           :up (raylib:make-vector3 :x 0.0 :y 1.0 :z 0.0) :fovy 10.0
+                           :projection (cffi:foreign-enum-value 'raylib:camera-projection :orthographic)))
+
+(defun make-game-scene-screen (&rest args)
+  (let* ((light-camera (raylib:copy-camera +shadow-light-camera-default+))
+         (shadow (eon:make-shadow-map-renderer :camera light-camera :size (raylib:make-vector2 :x 1024.0 :y 512.0)))
+         (screen (let ((*game-scene-shader-uniforms-shadow-map*
+                         (eon:shadow-map-renderer-texture shadow)))
+                   (apply #'%make-game-scene-screen :shadow shadow :light-camera light-camera args))))
+    (initialize-game-scene-screen-shader-uniforms screen)
+    (setf (eon:shadow-map-renderer-matrix shadow) (game-scene-screen-shadow-light-matrix screen))
+    screen))
+
+(defun game-scene-screen-look-at (screen target)
+  (let ((camera (game-scene-screen-camera screen))
+        (light-camera (game-scene-screen-light-camera screen)))
+    (let ((tween (ute:start
+                  (ute:timeline
+                   (:parallel
+                    (:from (#.(camera-3d-parameters-form 'camera) #.(camera-3d-parameters-form 'camera)) :duration 0.2)
+                    (:from (#.(camera-3d-parameters-form 'light-camera) #.(camera-3d-parameters-form 'light-camera)) :duration 0.2))))))
+      (let ((offset (raylib:vector3-subtract target (raylib:camera-target camera))))
+        (setf (raylib:camera-target camera) target
+              (raylib:camera-position camera) (raylib:vector3-add (raylib:camera-position camera) offset)
+              (raylib:camera-target light-camera) target
+              (raylib:camera-position light-camera) (raylib:vector3-add (raylib:camera-position light-camera) offset)))
+      (ute::base-tween-update tween single-float-epsilon))))
 
 (defun game-scene-screen-money (screen)
   (game-scene-screen--money screen))
@@ -95,21 +140,33 @@
   (setf (game-scene-screen--money screen) value))
 
 (defmethod eon:screen-render ((screen game-scene-screen))
+  (mapc (rcurry #'game-scene-tower-try-attack (game-scene-screen-enemies screen)) (game-scene-screen-towers screen))
   (raylib:clear-background raylib:+white+)
-  (let ((eon:*scene3d-camera* (game-scene-screen-camera screen)))
-    (raylib:with-mode-3d eon:*scene3d-camera*
-      (rlgl:push-matrix)
-      (rlgl:rotatef 90.0 1.0 0.0 0.0)
-      (rlgl:scalef (/ (coerce +tile-width+ 'single-float)) (/ (coerce +tile-height+ 'single-float)) 0.0)
-      (funcall (game-scene-screen-map-renderer screen))
-      (rlgl:pop-matrix)
-      (eon:scene3d-draw-simple (game-scene-screen-towers screen))
-      (mapc (rcurry #'game-scene-tower-try-attack (game-scene-screen-enemies screen)) (game-scene-screen-towers screen))
-      (eon:scene3d-draw-simple (game-scene-screen-enemies screen))))
+  (flet ((render-objects ()
+           (let ((eon:*scene3d-camera* (game-scene-screen-camera screen)))
+             (eon:scene3d-draw-simple (game-scene-screen-towers screen))
+             (eon:scene3d-draw-simple (game-scene-screen-enemies screen)))))
+    (eon:shadow-map-renderer-render (game-scene-screen-shadow screen) #'render-objects)
+    (raylib:with-mode-3d (game-scene-screen-camera screen)
+      (raylib:with-shader-mode (game-scene-screen-shader screen)
+        (raylib:copy-color raylib:+white+ (game-scene-screen-col-diffuse screen))
+        (update-game-scene-screen-shader-uniforms screen)
+        (rlgl:push-matrix)
+        (rlgl:rotatef 90.0 1.0 0.0 0.0)
+        (rlgl:scalef (/ (coerce +tile-width+ 'single-float)) (/ (coerce +tile-height+ 'single-float)) single-float-epsilon)
+        (funcall (game-scene-screen-map-renderer screen))
+        (rlgl:pop-matrix)
+        (rlgl:draw-render-batch-active)
+        (let ((shadow-intensity (game-scene-screen-shadow-intensity screen)))
+          (setf (game-scene-screen-shadow-intensity screen) 0.0)
+          (update-game-scene-screen-shader-uniforms screen)
+          (setf (game-scene-screen-shadow-intensity screen) shadow-intensity))
+        (render-objects))))
   (eon:scene2d-draw-simple (game-scene-screen-ui screen)))
 
 (defstruct (game-scene-tower (:include eon:scene3d-container)
                              (:constructor %make-game-scene-tower))
+  (shader nil :type raylib:shader)
   (selectedp nil :type boolean)
   (type nil :type symbol)
   (level 0 :type (integer 0 3))
@@ -185,13 +242,20 @@
 (defun game-scene-tower-attack-power (tower)
   (assoc-value (getf (assoc-value *tower-types* (game-scene-tower-type tower)) :power) (game-scene-tower-level tower)))
 
+(defun apply-model-shader (model shader)
+  (dolist (material (cobj:ccoerce (cobj:cpointer-carray (raylib:model-materials model) (raylib:model-material-count model)) 'list))
+    (setf (raylib:material-shader material) shader)))
+
 (defun game-scene-tower-update-model (tower)
   (setf (game-scene-tower-model tower)
         (destructuring-bind (&key model)
             (game-scene-tower-type-level-asset
              (game-scene-tower-type tower)
              (game-scene-tower-level tower))
-          (when model (eon:load-asset 'raylib:model model)))))
+          (when model
+            (let ((model (eon:load-asset 'raylib:model model)))
+              (apply-model-shader model (game-scene-tower-shader tower))
+              model)))))
 
 (defun game-scene-tower-update (tower)
   (game-scene-tower-update-model tower)
@@ -235,14 +299,16 @@
 (defmethod game-scene-enemy-type-asset ((type symbol))
   (list :model (game-asset (pathname (format nil "models/enemies/~A.glb" (string-downcase (symbol-name type)))))))
 
-(defun make-game-scene-enemy (&rest args &key (type :slime) &allow-other-keys)
+(defun make-game-scene-enemy (&rest args &key (type :slime) shader &allow-other-keys)
   (apply #'%make-game-scene-enemy
          (destructuring-bind (&key model (model-animations model))
              (game-scene-enemy-type-asset type)
-           (list* :content (list (eon:load-asset 'raylib:model model))
+           (list* :content (list (let ((model (eon:load-asset 'raylib:model model)))
+                                   (when shader (apply-model-shader model shader))
+                                   model))
                   :scale (raylib:vector3-scale (raylib:vector3-one) (/ 3.0))
                   :animations (cobj:ccoerce (eon:load-asset 'raylib:model-animations model-animations) 'list)
-                  args))))
+                  (remove-from-plistf args :shader)))))
 
 (defun game-scene-enemy-model (enemy)
   (first (game-scene-enemy-content enemy)))
@@ -505,7 +571,8 @@
           (loop :with group := (eon:scene2d-construct (eon:scene2d-group))
                 :for cell :in (tiled:layer-cells (find "ground" (tiled:map-layers map) :key #'tiled:layer-name :test #'string=))
                 :when (gethash "base" (tiled:properties (tiled:cell-tile cell)))
-                  :do (push (make-game-scene-tower 
+                  :do (push (make-game-scene-tower
+                             :shader (game-scene-screen-shader screen)
                              :position (position-2d->3d
                                         (raylib:make-vector2
                                          :x (+ (coerce (tiled:cell-column cell) 'single-float) 0.5)
@@ -523,7 +590,7 @@
                      (setf (game-scene-tower-selectedp tower) nil))
                    (select-tower (tower)
                      (setf (game-scene-tower-selectedp (setf selected-tower tower)) t)
-                     (game-scene-camera-look-at (game-scene-screen-camera screen) (game-scene-tower-position tower)))
+                     (game-scene-screen-look-at screen (game-scene-tower-position tower)))
                    (tower-screen-position (&optional (tower selected-tower))
                      (raylib:get-world-to-screen-ex
                       (game-scene-tower-position tower)
@@ -633,6 +700,7 @@
                      :do (await (eon:promise-sleep 1.5))
                          (push
                           (let ((enemy (make-game-scene-enemy
+                                        :shader (game-scene-screen-shader screen)
                                         :position (raylib:copy-vector3 (first path))
                                         :type :dragon
                                         :path (rest path))))
