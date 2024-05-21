@@ -67,7 +67,7 @@
                                  :top 2.0 :bottom 2.0 :left 2.0 :right 2.0
                                  :child (eon:scene2d-box
                                          :orientation :horizontal
-                                         :children ((eon:scene2d-label :string "Money: ")
+                                         :children ((eon:scene2d-label :string "$ ")
                                                     (eon:scene2d-label :string "0" :name label-money)))))))))
 
 (defstruct (game-scene-screen (:constructor %make-game-scene-screen))
@@ -81,7 +81,8 @@
   (ui (make-game-scene-ui) :type eon:scene2d-constructed)
   (-money 0 :type non-negative-fixnum)
   (towers nil :type list)
-  (enemies nil :type list))
+  (enemies nil :type list)
+  (objects nil :type list))
 
 (defvar *game-scene-screen*)
 
@@ -145,7 +146,9 @@
   (flet ((render-objects ()
            (let ((eon:*scene3d-camera* (game-scene-screen-camera screen)))
              (eon:scene3d-draw-simple (game-scene-screen-towers screen))
-             (eon:scene3d-draw-simple (game-scene-screen-enemies screen)))))
+             (eon:scene3d-draw-simple (game-scene-screen-enemies screen))
+             (rlgl:normal3f 0.0 1.0 0.0)
+             (eon:scene3d-draw-simple (game-scene-screen-objects screen)))))
     (eon:shadow-map-renderer-render (game-scene-screen-shadow screen) #'render-objects)
     (raylib:with-mode-3d (game-scene-screen-camera screen)
       (raylib:with-shader-mode (game-scene-screen-shader screen)
@@ -275,40 +278,85 @@
   (animations nil :type list)
   (hp 100.0 :type single-float)
   (total-hp 100.0 :type single-float)
-  (hp-bar nil :type (or eon:scene3d-node null)))
+  (hp-bar nil :type (or eon:scene3d-node null))
+  (blood-emitter (eon:make-scene3d-particle-emitter
+                  :rate 0.0
+                  :capacity 512
+                  :updater (lambda (position)
+                             (let ((velocity (raylib:make-vector3))
+                                   (acceleration (raylib:make-vector3 :x 0.0 :y -10.0 :z 0.0)))
+                               (lambda (particle)
+                                 (if (zerop (eon:particle-3d-age particle))
+                                     (progn
+                                       (eon:particle-3d-initialize-default particle position)
+                                       (setf (raylib:vector3-x velocity) (1- (random 2.0))
+                                             (raylib:vector3-y velocity) (1- (random 2.0))
+                                             (raylib:vector3-z velocity) (1- (random 2.0)))
+                                       (raylib:%vector3-normalize (& velocity) (& velocity))
+                                       (setf (raylib:vector3-y velocity) 5.0)
+                                       (setf (eon:particle-3d-velocity particle) velocity
+                                             (eon:particle-3d-acceleration particle) acceleration))
+                                     (eon:particle-3d-update-motion particle)))))
+                  :renderer (eon:particle-3d-cube-renderer 0.05 (eon:particle-3d-interpolate-color-over-age raylib:+red+ (raylib:fade raylib:+red+ 0.0) #'ute:circ-in)))
+   :type eon:scene3d-particle-emitter)
+  (animation-tween (ute:tween :to ()) :type ute:tween)
+  (level 1 :type positive-fixnum))
 
 (defstruct (game-scene-enemy-hp-bar (:include eon:scene2d-layout)
                                     (:constructor %make-game-scene-enemy-hp-bar))
   (target nil :type game-scene-enemy))
 
 (defmethod eon:scene2d-draw ((bar game-scene-enemy-hp-bar) position origin scale rotation tint)
-  (let ((target (game-scene-enemy-hp-bar-target bar)))
-    (clet ((size (raylib:vector2-scale
-                  (game-scene-enemy-hp-bar-size bar)
-                  (/ (game-scene-enemy-hp target) (game-scene-enemy-total-hp target)))))
+  (let* ((target (game-scene-enemy-hp-bar-target bar))
+         (ratio (/ (game-scene-enemy-hp target) (game-scene-enemy-total-hp target))))
+    (clet ((size (raylib:vector2-scale (game-scene-enemy-hp-bar-size bar) ratio)))
       (declare (dynamic-extent size))
       (setf (raylib:vector2-y size) (raylib:vector2-y (game-scene-enemy-hp-bar-size bar)))
       (raylib:draw-rectangle-v position (game-scene-enemy-hp-bar-size bar) raylib:+gray+)
-      (raylib:draw-rectangle-v position size raylib:+green+))))
+      (raylib:draw-rectangle-v position size (cond
+                                               ((< ratio 0.15) raylib:+red+)
+                                               ((< ratio 0.5) raylib:+gold+)
+                                               (t raylib:+green+))))))
 
 (defun make-game-scene-enemy-hp-bar (&key target)
   (%make-game-scene-enemy-hp-bar :target target :size (raylib:make-vector2 :x 96.0 :y 12.0)))
 
-(defgeneric game-scene-enemy-type-asset (type))
+(defparameter *enemy-types* '((:dragon :animation (:idle "Dragon_Flying" :dead "Dragon_Death") :base-hp 150.0 :speed 1.0 :base-bounty 5000)
+                              (:slime :animation (:idle "Slime_Walk" :dead "Slime_Death") :base-hp 50.0 :speed 0.5 :base-bounty 750)
+                              (:bat :animation (:idle "Bat_Flying" :dead "Bat_Death") :base-hp 25.0 :speed 1.5 :base-bounty 500)
+                              (:skeleton :animation (:idle "Skeleton_Running" :dead "Skeleton_Death") :base-hp 50.0 :speed 0.75 :base-bounty 1500)))
 
-(defmethod game-scene-enemy-type-asset ((type symbol))
-  (list :model (game-asset (pathname (format nil "models/enemies/~A.glb" (string-downcase (symbol-name type)))))))
+(defun game-scene-enemy-type-asset (type)
+  (list :model (game-asset
+                (pathname
+                 (format nil "models/enemies/~A.glb"
+                         (or (getf (assoc-value *enemy-types* type) :model)
+                             (string-downcase (symbol-name type))))))))
 
-(defun make-game-scene-enemy (&rest args &key (type :slime) shader &allow-other-keys)
+(defun make-game-scene-enemy (&rest args
+                              &key
+                                (type :slime)
+                                shader
+                                (level 1)
+                                (hp (* (getf (assoc-value *enemy-types* type) :base-hp) (/ (1+ level) 2.0)))
+                                (speed (getf (assoc-value *enemy-types* type) :speed))
+                              &allow-other-keys)
   (apply #'%make-game-scene-enemy
-         (destructuring-bind (&key model (model-animations model))
-             (game-scene-enemy-type-asset type)
-           (list* :content (list (let ((model (eon:load-asset 'raylib:model model)))
-                                   (when shader (apply-model-shader model shader))
-                                   model))
-                  :scale (raylib:vector3-scale (raylib:vector3-one) (/ 3.0))
-                  :animations (cobj:ccoerce (eon:load-asset 'raylib:model-animations model-animations) 'list)
-                  (remove-from-plistf args :shader)))))
+           (destructuring-bind (&key model (model-animations model))
+               (game-scene-enemy-type-asset type)
+             (list* :content (list (let ((model (eon:load-asset 'raylib:model model)))
+                                     (when shader (apply-model-shader model shader))
+                                     model))
+                    :scale (raylib:vector3-scale (raylib:vector3-one) (/ 3.0))
+                    :animations (cobj:ccoerce (eon:load-asset 'raylib:model-animations model-animations) 'list)
+                    :hp hp :total-hp hp :speed speed
+                    (remove-from-plistf args :shader :hp :total-hp :speed)))))
+
+(defun game-scene-enemy-base-bounty (enemy)
+  (getf (assoc-value *enemy-types* (game-scene-enemy-type enemy)) :base-bounty))
+
+(defun game-scene-enemy-find-animation (enemy name)
+  (getf (getf (assoc-value *enemy-types* (game-scene-enemy-type enemy)) :animation) name))
 
 (defun game-scene-enemy-model (enemy)
   (first (game-scene-enemy-content enemy)))
@@ -319,14 +367,63 @@
 (defun game-scene-enemy-active-animation (enemy)
   (cobj:ccoerce (raylib:model-animation-name (first (game-scene-enemy-animations enemy))) 'string))
 
+(defmacro letrec (bindings &body body)
+  `(let ,(mapcar #'car bindings)
+     (setf . ,(mappend #'identity  bindings))
+     (locally . ,body)))
+
 (defun (setf game-scene-enemy-active-animation) (name enemy)
-  (rotatef
-   (first (game-scene-enemy-animations enemy))
-   (nth (position
-         name (game-scene-enemy-animations enemy)
-         :test #'string= :key (compose (rcurry #'cobj:ccoerce 'string) #'raylib:model-animation-name))
-        (game-scene-enemy-animations enemy)))
+  (ute:kill (game-scene-enemy-animation-tween enemy))
+  (when name
+    (rotatef
+     (first (game-scene-enemy-animations enemy))
+     (nth (position
+           name (game-scene-enemy-animations enemy)
+           :test #'string= :key (compose (rcurry #'cobj:ccoerce 'string) #'raylib:model-animation-name))
+          (game-scene-enemy-animations enemy)))
+    (let ((model (game-scene-enemy-model enemy))
+          (model-animation (first (game-scene-enemy-animations enemy))))
+      (labels ((tween ()
+                 (let ((frame-index 0)
+                       (frame-count (raylib:model-animation-frame-count model-animation)))
+                   (flet ((frame-index () frame-index)
+                          ((setf frame-index) (value)
+                            (setf frame-index value)
+                            (raylib:update-model-animation model model-animation frame-index)
+                            frame-index))
+                     (letrec ((tween (ute:tween
+                                      :to (((eon:integer-float (frame-index)))
+                                           ((eon:integer-float (1- frame-count))))
+                                      :ease #'ute:linear-inout
+                                      :duration (* frame-count (/ 60.0))
+                                      :callback (lambda ()
+                                                  (when (eq (game-scene-enemy-animation-tween enemy) tween)
+                                                    (tween))))))
+                       (setf (game-scene-enemy-animation-tween enemy) (ute:start tween)))))))
+        (tween))))
   name)
+
+(defun game-scene-enemy-promise-finish-animation (enemy)
+  (promise:with-promise (succeed)
+    (setf (ute:callback (game-scene-enemy-animation-tween enemy)) #'succeed)))
+
+(defun game-scene-enemy-promise-die (enemy)
+  (async
+    (await (game-scene-enemy-promise-finish-animation enemy))
+    (setf (game-scene-enemy-active-animation enemy) (game-scene-enemy-find-animation enemy :dead))
+    (await (game-scene-enemy-promise-finish-animation enemy))
+    (setf (game-scene-enemy-active-animation enemy) nil)
+    (await (eon:promise-tween (ute:tween :to (((eon:integer-float (raylib:color-a (game-scene-enemy-color enemy)))) (0.0))
+                                         :duration 0.5)))))
+
+(defun game-scene-screen-add-enemy (screen enemy)
+  (push enemy (game-scene-screen-enemies screen)))
+
+(defun game-scene-screen-remove-enemy (screen enemy)
+  (deletef (game-scene-screen-enemies screen) enemy)
+  (loop :for tower :in (game-scene-screen-towers screen)
+        :when (eq (game-scene-tower-target tower) enemy)
+          :do (setf (game-scene-tower-target tower) nil)))
 
 (defun game-scene-enemy-updater (enemy screen)
   (with-accessors ((path game-scene-enemy-path)) enemy
@@ -349,20 +446,21 @@
              (when (< (raylib:vector3-distance position target) single-float-epsilon)
                (pop path))))
           (function (funcall (pop path)))))
-      (not
-       (unless (and path (plusp (game-scene-enemy-hp enemy)))
-         (deletef (game-scene-screen-enemies screen) enemy)
-         t)))))
-
-(declaim (ftype (function (non-negative-fixnum &optional single-float) (values non-negative-fixnum)) game-loop-counter))
-(defun game-loop-counter (max &optional (speed 60.0))
-  (values (floor (mod (* (eon:game-loop-time) (coerce speed 'double-float)) (coerce max 'double-float)))))
+      (cond
+        ((null path)
+         (setf (game-scene-enemy-active-animation enemy) nil)
+         (game-scene-screen-remove-enemy screen enemy)
+         nil)
+        ((not (plusp (game-scene-enemy-hp enemy)))
+         (async
+           (await (game-scene-enemy-promise-die enemy))
+           (incf (game-scene-screen-money screen) (* (game-scene-enemy-base-bounty enemy) (floor (+ (game-scene-enemy-level enemy) 2) 3)))
+           (setf (game-scene-enemy-active-animation enemy) nil)
+           (game-scene-screen-remove-enemy screen enemy))
+         nil)
+        (t t)))))
 
 (defmethod eon:scene3d-draw ((enemy game-scene-enemy) position origin scale rotation tint)
-  (let ((animation (first (game-scene-enemy-animations enemy))))
-    (raylib:update-model-animation
-     (game-scene-enemy-model enemy) animation
-     (game-loop-counter (raylib:model-animation-frame-count animation))))
   (call-next-method)
   (with-accessors ((hp-bar game-scene-enemy-hp-bar)) enemy
     (unless hp-bar
@@ -375,8 +473,10 @@
                          :up (raylib:vector3-cross-product (raylib:get-camera-right camera) (raylib:get-camera-forward camera))))))
        :after nil))
     (rlgl:draw-render-batch-active)
+    (eon:scene3d-draw-simple (game-scene-enemy-blood-emitter enemy) :position position)
     (rlgl:disable-depth-test)
-    (eon:scene3d-draw-simple hp-bar :position position)
+    (rlgl:normal3f 0.0 1.0 0.0)
+    (eon:scene3d-draw-simple hp-bar :position position :tint tint)
     (rlgl:draw-render-batch-active)
     (rlgl:enable-depth-test)))
 
@@ -404,11 +504,6 @@
        (game-scene-enemy-position enemy))
       (game-scene-tower-attack-radius tower)))
 
-(defmacro letrec (bindings &body body)
-  `(let ,(mapcar #'car bindings)
-     (setf . ,(mappend #'identity  bindings))
-     (locally . ,body)))
-
 (defun game-scene-tower-attack (tower &optional enemies)
   (let ((main-enemy (game-scene-tower-target tower))
         (damage (* (game-scene-tower-attack-power tower)
@@ -416,26 +511,34 @@
                      ((eql t) (eon:game-loop-delta-time))
                      (single-float 1.0)))))
     (flet ((damage (target)
+             (eon:scene3d-particle-emitter-burst
+              (game-scene-enemy-blood-emitter target)
+              (etypecase (game-scene-tower-attack-rate tower)
+                ((eql t) 1)
+                (single-float 60)))
              (with-accessors ((hp game-scene-enemy-hp)) target
                (decf hp damage)
                (when (minusp hp) (setf hp 0.0)))))
       (etypecase (game-scene-tower-attack-rate tower)
         ((eql t)
-         (loop :with source := (position-3d->2d (game-scene-tower-position tower))
-               :and target := (position-3d->2d (game-scene-enemy-position main-enemy))
-               :for enemy :in (or enemies (list main-enemy))
-               :for point := (position-3d->2d (game-scene-enemy-position enemy))
-               :when (and (game-scene-tower-target-in-range-p tower enemy)
-                          (plusp (game-scene-enemy-hp enemy))
-                          (raylib:check-collision-point-line
-                           (raylib:vector2-scale point 128.0)
-                           (raylib:vector2-scale source 128.0)
-                           (raylib:vector2-scale target 128.0)
-                           128))
-                 :do (damage enemy)))
+         (cobj:with-monotonic-buffer-allocator (:size 64)
+           (loop :with source := (position-3d->2d (game-scene-tower-position tower))
+                 :and target := (position-3d->2d (game-scene-enemy-position main-enemy))
+                 :for enemy :in (or enemies (list main-enemy))
+                 :for point := (position-3d->2d (game-scene-enemy-position enemy))
+                 :when (and (game-scene-tower-target-in-range-p tower enemy)
+                            (plusp (game-scene-enemy-hp enemy))
+                            (raylib:check-collision-point-line
+                             (raylib:vector2-scale point 128.0)
+                             (raylib:vector2-scale source 128.0)
+                             (raylib:vector2-scale target 128.0)
+                             128))
+                   :do (damage enemy))))
         (single-float
          (push (letrec ((missile (make-game-scene-tower-missile
-                                  :position (raylib:copy-vector3 (game-scene-tower-position tower))
+                                  :position (raylib:vector3-add
+                                             (game-scene-tower-position tower)
+                                             (raylib:make-vector3 :x 0.0 :y 0.5 :z 0.0))
                                   :target main-enemy
                                   :callback (lambda (hitp)
                                               (when hitp
@@ -474,14 +577,15 @@
       (setf (game-scene-tower-missile-target missile) nil)
       (eon:add-game-loop-hook
        (lambda ()
-         (when (plusp (game-scene-enemy-hp target))
-           (let ((source (game-scene-tower-missile-position missile))
-                 (target (game-scene-enemy-position target))
-                 (speed (game-scene-tower-missile-speed missile)))
-             (update-position-toward-target source target speed)
-             (not (when (<= (abs (raylib:vector3-distance source target)) single-float-epsilon)
-                    (funcall (game-scene-tower-missile-callback missile) t)
-                    t)))))
+         (if (plusp (game-scene-enemy-hp target))
+             (let ((source (game-scene-tower-missile-position missile))
+                   (target (game-scene-enemy-position target))
+                   (speed (game-scene-tower-missile-speed missile)))
+               (update-position-toward-target source target speed)
+               (not (when (<= (abs (raylib:vector3-distance source target)) single-float-epsilon)
+                      (funcall (game-scene-tower-missile-callback missile) t)
+                      t)))
+             (progn (funcall (game-scene-tower-missile-callback missile) nil) nil)))
        :after #'identity)))
   (raylib:draw-cube-v
    (game-scene-tower-missile-position missile)
@@ -493,7 +597,9 @@
         (ecase (game-scene-tower-type tower)
           ((:round-1 :round-2)
            (eon:make-scene3d-particle-emitter
-            :position (game-scene-tower-position tower)
+            :position (raylib:vector3-add
+                       (game-scene-tower-position tower)
+                       (raylib:make-vector3 :x 0.0 :y 0.5 :z 0.0))
             :rate (lambda () (if (game-scene-tower-target tower) 120.0 0.0))
             :capacity 512
             :updater (eon:scene3d-particle-emitter-laser-updater
@@ -506,7 +612,7 @@
                       :axial-acceleration 1.0
                       :normal-velocity (raylib:vector2-zero)
                       :normal-offset (eon:make-particle-3d-vector2-generator 0.1))
-            :renderer (eon:particle-3d-cube-renderer 0.1 (eon:particle-3d-interpolate-color-over-age raylib:+red+ (raylib:fade raylib:+red+ 0.0) #'ute:circ-in))))
+            :renderer (eon:particle-3d-cube-renderer 0.1 (eon:particle-3d-interpolate-color-over-age raylib:+green+ (raylib:fade raylib:+blue+ 0.0) #'ute:sine-in))))
           ((:square-1 :square-2 nil) nil))))
 
 (defmacro with-popped-ui ((group ui) &body body)
@@ -560,14 +666,14 @@
 
 (defun main ()
   (raylib:set-config-flags (cffi:foreign-bitfield-value 'raylib:config-flags '(:window-resizable)))
-  (raylib:with-window ("Spring Lisp Game Jam 2024" ((* +viewport-width+ 2) (* +viewport-height+ 2)))
+  (raylib:with-window ("Spring Lisp Game Jam 2024" (+viewport-width+ +viewport-height+))
     (raylib:set-target-fps 60)
     (eon:with-game-context
       (let* ((map (tiled:load-map (game-asset #P"maps/map-1.tmx")))
              (screen (make-game-scene-screen :map-renderer (eon:tiled-map-renderer map))))
         (eon:scene2d-layout (game-scene-screen-ui screen))
         (with-accessors ((money game-scene-screen-money)) screen
-          (setf (game-scene-screen-money screen) 100000)
+          (setf (game-scene-screen-money screen) 5000)
           (loop :with group := (eon:scene2d-construct (eon:scene2d-group))
                 :for cell :in (tiled:layer-cells (find "ground" (tiled:map-layers map) :key #'tiled:layer-name :test #'string=))
                 :when (gethash "base" (tiled:properties (tiled:cell-tile cell)))
@@ -610,7 +716,8 @@
                              (let* ((operations (append
                                                  (cond
                                                    ((null (game-scene-tower-type selected-tower)) '(build))
-                                                   ((< (game-scene-tower-level selected-tower) 3) '(upgrade demolish)))
+                                                   ((< (game-scene-tower-level selected-tower) 3) '(upgrade)))
+                                                 (when (game-scene-tower-type selected-tower) '(demolish))
                                                  '(cancel)))
                                     (select-box (eon:scene2d-construct
                                                  (eon:select-box
@@ -692,20 +799,42 @@
                                                 (game-scene-tower-type selected-tower) nil)
                                           (game-scene-tower-update selected-tower))))
                                      (cancel))))))))))))
-        (let ((path (random-elt (game-scene-map-enemy-paths map))))
+        (let* ((paths (game-scene-map-enemy-paths map))
+               (path (random-elt paths)))
+          (loop :with sprites := (eon:array-vector (eon:split-texture (eon:load-asset 'raylib:texture (game-asset #P"flag.png")) '(1 5)))
+                :for path :in paths
+                :for billboard := (eon:make-scene3d-billboard
+                                   :content (first-elt sprites)
+                                   :position (raylib:copy-vector3 (lastcar path))
+                                   :origin (raylib:make-vector3
+                                            :x (/ (eon:texture-region-width (first-elt sprites)) 8.0)
+                                            :y (eon:texture-region-height (first-elt sprites))
+                                            :z 0.0)
+                                   :scale (raylib:vector3-scale (raylib:vector3-one) (/ 2.0 (eon:texture-region-height (first-elt sprites)))))
+                :do (letrec ((timeline (ute:timeline
+                                        (:sequence
+                                         (:tween (eon:scene3d-billboard-tween-frames billboard sprites :duration 0.5))
+                                         (:call (lambda ()
+                                                  (unless (find billboard (game-scene-screen-objects screen))
+                                                    (ute:kill timeline))))
+                                         :repeat t))))
+                      (ute:start timeline))
+                    (push billboard (game-scene-screen-objects screen)))
           (eon:add-game-loop-hook
            (lambda ()
              (async
-               (loop :repeat 3
-                     :do (await (eon:promise-sleep 1.5))
+               (await (eon:promise-sleep 5.0))
+               (loop :repeat 10
+                     :do (await (eon:promise-sleep (random 3.0)))
                          (push
                           (let ((enemy (make-game-scene-enemy
                                         :shader (game-scene-screen-shader screen)
                                         :position (raylib:copy-vector3 (first path))
-                                        :type :dragon
+                                        :type (random-elt '(:slime :bat))
+                                        :level (+ (random 5) 2)
                                         :path (rest path))))
                             (eon:add-game-loop-hook (game-scene-enemy-updater enemy screen) :after #'identity)
-                            (setf (game-scene-enemy-active-animation enemy) "Dragon_Flying")
+                            (setf (game-scene-enemy-active-animation enemy) (game-scene-enemy-find-animation enemy :idle))
                             enemy)
                           (game-scene-screen-enemies screen)))))
            :after nil))
