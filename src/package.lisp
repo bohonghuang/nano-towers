@@ -483,18 +483,19 @@
 (defun game-scene-map-enemy-paths (map)
   (mapcar
    (lambda (object)
-     (mapcar
-      (lambda (point)
-        (raylib:vector3-add
-         (position-2d->3d
-          (raylib:make-vector2
-           :x (/ (coerce (tiled:object-x object) 'single-float) (coerce +tile-width+ 'single-float))
-           :y (/ (coerce (tiled:object-y object) 'single-float) (coerce +tile-height+ 'single-float))))
-         (position-2d->3d
-          (raylib:make-vector2
-           :x (/ (coerce (car point) 'single-float) (coerce +tile-width+ 'single-float))
-           :y (/ (coerce (cdr point) 'single-float) (coerce +tile-height+ 'single-float))))))
-      (tiled:polyline-points object)))
+     (cons (mapcar
+            (lambda (point)
+              (raylib:vector3-add
+               (position-2d->3d
+                (raylib:make-vector2
+                 :x (/ (coerce (tiled:object-x object) 'single-float) (coerce +tile-width+ 'single-float))
+                 :y (/ (coerce (tiled:object-y object) 'single-float) (coerce +tile-height+ 'single-float))))
+               (position-2d->3d
+                (raylib:make-vector2
+                 :x (/ (coerce (car point) 'single-float) (coerce +tile-width+ 'single-float))
+                 :y (/ (coerce (cdr point) 'single-float) (coerce +tile-height+ 'single-float))))))
+            (tiled:polyline-points object))
+           (read-from-string (gethash "waves" (tiled:properties object)))))
    (tiled:object-group-objects
     (find "enemy" (tiled:map-layers map) :key #'tiled:layer-name :test #'string=))))
 
@@ -637,7 +638,7 @@
                                         (eon:scene2d-margin
                                          :left 2.0 :right 2.0 :top 2.0 :bottom 2.0
                                          :child (eon:select-box
-                                                 :dimensions (T 1)
+                                                 :layout (T 1)
                                                  :children ()
                                                  :name select-box)))))))
   (:constructor (&key (title "Title") (message "Message") (choices '("OK")))
@@ -799,10 +800,9 @@
                                                 (game-scene-tower-type selected-tower) nil)
                                           (game-scene-tower-update selected-tower))))
                                      (cancel))))))))))))
-        (let* ((paths (game-scene-map-enemy-paths map))
-               (path (random-elt paths)))
+        (let ((paths (game-scene-map-enemy-paths map)))
           (loop :with sprites := (eon:array-vector (eon:split-texture (eon:load-asset 'raylib:texture (game-asset #P"flag.png")) '(1 5)))
-                :for path :in paths
+                :for (path . nil) :in paths
                 :for billboard := (eon:make-scene3d-billboard
                                    :content (first-elt sprites)
                                    :position (raylib:copy-vector3 (lastcar path))
@@ -820,23 +820,27 @@
                                          :repeat t))))
                       (ute:start timeline))
                     (push billboard (game-scene-screen-objects screen)))
-          (eon:add-game-loop-hook
-           (lambda ()
-             (async
-               (await (eon:promise-sleep 5.0))
-               (loop :repeat 10
-                     :do (await (eon:promise-sleep (random 3.0)))
-                         (push
-                          (let ((enemy (make-game-scene-enemy
-                                        :shader (game-scene-screen-shader screen)
-                                        :position (raylib:copy-vector3 (first path))
-                                        :type (random-elt '(:slime :bat))
-                                        :level (+ (random 5) 2)
-                                        :path (rest path))))
-                            (eon:add-game-loop-hook (game-scene-enemy-updater enemy screen) :after #'identity)
-                            (setf (game-scene-enemy-active-animation enemy) (game-scene-enemy-find-animation enemy :idle))
-                            enemy)
-                          (game-scene-screen-enemies screen)))))
-           :after nil))
+          (async
+            (loop :for wave-index :below (reduce #'max paths :key (compose #'length #'cdr))
+                  :do (await (apply #'ajoin (loop :for (path . waves-desc) :in paths
+                                                  :collect (let ((path path)
+                                                                 (waves-desc waves-desc))
+                                                             (async
+                                                               (loop :for enemy-desc :in (nth wave-index waves-desc)
+                                                                     :do (destructuring-bind (type &key (interval 1.0) (count 1) (level 1)) enemy-desc
+                                                                           (loop :repeat count
+                                                                                 :when type
+                                                                                   :do (push
+                                                                                        (let ((enemy (make-game-scene-enemy
+                                                                                                      :shader (game-scene-screen-shader screen)
+                                                                                                      :position (raylib:copy-vector3 (first path))
+                                                                                                      :type type
+                                                                                                      :level level
+                                                                                                      :path (rest path))))
+                                                                                          (eon:add-game-loop-hook (game-scene-enemy-updater enemy screen) :after #'identity)
+                                                                                          (setf (game-scene-enemy-active-animation enemy) (game-scene-enemy-find-animation enemy :idle))
+                                                                                          enemy)
+                                                                                        (game-scene-screen-enemies screen))
+                                                                                 :do (await (eon:promise-sleep interval)))))))))))))
         (setf (eon:current-screen) screen))
       (eon:do-screen-loop (eon:make-fit-viewport :width +viewport-width+ :height +viewport-height+)))))
