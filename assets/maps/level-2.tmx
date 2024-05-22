@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.10" tiledversion="1.10.2" orientation="orthogonal" renderorder="right-down" width="17" height="15" tilewidth="400" tileheight="400" infinite="0" nextlayerid="3" nextobjectid="3">
+ <properties>
+  <property name="money" type="int" value="5000"/>
+ </properties>
+ <tileset firstgid="1" source="tileset-1.tsx"/>
+ <layer id="1" name="ground" width="17" height="15">
+  <data encoding="csv">
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+1,4,4,4,4,4,4,4,4,2,2,2,2,2,2,2,1,
+1,4,4,4,4,4,4,4,4,2,3,3,3,2,3,2,1,
+1,4,4,4,4,4,4,4,4,2,3,2,3,2,3,2,1,
+1,4,4,4,4,4,4,4,4,2,3,2,3,2,3,2,1,
+4,2,2,2,2,2,2,2,2,2,3,2,3,2,3,2,1,
+3,3,3,3,3,3,3,3,3,3,3,2,3,3,3,2,1,
+4,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,
+3,3,3,3,3,3,3,3,3,3,3,2,3,3,3,2,1,
+4,2,2,2,2,2,2,2,2,2,3,2,3,2,3,2,1,
+1,4,4,4,4,4,4,4,4,2,3,2,3,2,3,2,1,
+1,4,4,4,4,4,4,4,4,2,3,2,3,2,3,2,1,
+1,4,4,4,4,4,4,4,4,2,3,3,3,2,3,2,1,
+1,4,4,4,4,4,4,4,4,2,2,2,2,2,2,2,1,
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1
+</data>
+ </layer>
+ <objectgroup id="2" name="enemy">
+  <object id="1" x="200" y="2600">
+   <properties>
+    <property name="waves">(((nil :interval 15.0)
+  (:slime :level 1 :count 3 :interval 1.0)
+  (nil :interval 1.0)
+  (:bat :level 1 :count 3 :interval 0.5))
+ ((nil :interval 10.0)
+  (:slime :level 2 :count 5 :interval 1.0)
+  (:bat :level 2 :count 5 :interval 0.5))
+ ((nil :interval 10.0)
+  (:slime :level 3 :count 7 :interval 1.0)
+  (:bat :level 3 :count 7 :interval 0.5))
+ ((nil :interval 10.0)
+  (:slime :level 4 :count 7 :interval 1.0)
+  (:bat :level 4 :count 7 :interval 0.5)
+  (:skeleton :level 4 :count 3 :interval 1.0))
+ ((nil :interval 10.0)
+  (:slime :level 5 :count 7 :interval 1.0)
+  (:bat :level 5 :count 7 :interval 0.5)
+  (:dragon :level 5 :count 3 :interval 1.0)))</property>
+   </properties>
+   <polyline points="0,0 4000,0 4000,-1600 4800,-1600 4800,0 5600,0 5600,-1600"/>
+  </object>
+  <object id="2" x="200" y="3400">
+   <properties>
+    <property name="waves">(((nil :interval 15.0)
+  (:slime :level 1 :count 3 :interval 1.0)
+  (nil :interval 1.0)
+  (:bat :level 1 :count 3 :interval 0.5))
+ ((nil :interval 10.0)
+  (:slime :level 2 :count 5 :interval 1.0)
+  (:bat :level 2 :count 5 :interval 0.5))
+ ((nil :interval 10.0)
+  (:slime :level 3 :count 7 :interval 1.0)
+  (:bat :level 3 :count 7 :interval 0.5))
+ ((nil :interval 10.0)
+  (:slime :level 4 :count 7 :interval 1.0)
+  (:bat :level 4 :count 7 :interval 0.5)
+  (:skeleton :level 4 :count 3 :interval 1.0))
+ ((nil :interval 10.0)
+  (:slime :level 5 :count 7 :interval 1.0)
+  (:bat :level 5 :count 7 :interval 0.5)
+  (:dragon :level 5 :count 3 :interval 1.0)))</property>
+   </properties>
+   <polyline points="0,0 4000,0 4000,1600 4800,1600 4800,0 5600,0 5600,1600"/>
+  </object>
+ </objectgroup>
+</map>

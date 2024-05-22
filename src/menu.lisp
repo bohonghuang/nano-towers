@@ -226,8 +226,8 @@ Game assets provided by:
                     :until (eql index 2)
                     :do (case index
                           (0 (when (save-screen-excursion
-                                     (loop :for i :from 1 :to 1
-                                           :always (await (promise-play-level))))
+                                     (loop :for i :from 1 :to 2
+                                           :always (await (promise-play-level i))))
                                (await (promise-display-credit))))
                           (1 (await (promise-display-credit)))))
               (throw 'exit t))))

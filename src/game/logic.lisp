@@ -177,7 +177,7 @@
                    (setf (game-context-result context) :success)
                    (await (promise-cancel-all-input))))))
         (with-accessors ((money game-context-money)) context
-          (setf money 2500)
+          (setf money (gethash "money" (tiled:properties map)))
           (let ((focus-manager (loop :with group := (eon:scene2d-construct (eon:scene2d-group))
                                      :for cell :in (tiled:layer-cells (find "ground" (tiled:map-layers map) :key #'tiled:layer-name :test #'string=))
                                      :when (gethash "base" (tiled:properties (tiled:cell-tile cell)))

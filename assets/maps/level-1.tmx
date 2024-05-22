@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <map version="1.10" tiledversion="1.10.2" orientation="orthogonal" renderorder="right-down" width="9" height="9" tilewidth="400" tileheight="400" infinite="0" nextlayerid="4" nextobjectid="24">
+ <properties>
+  <property name="money" type="int" value="2500"/>
+ </properties>
  <tileset firstgid="1" source="tileset-1.tsx"/>
  <layer id="1" name="ground" width="9" height="9">
   <data encoding="csv">
@@ -17,7 +20,7 @@
  <objectgroup id="3" name="enemy">
   <object id="23" name="path" x="1000" y="3400">
    <properties>
-    <property name="waves">(((nil :interval 10.0)
+    <property name="waves">(((nil :interval 15.0)
   (:slime :level 1 :count 3 :interval 1.0)
   (nil :interval 1.0)
   (:bat :level 1 :count 3 :interval 0.5))
@@ -26,7 +29,15 @@
   (:bat :level 2 :count 5 :interval 0.5))
  ((nil :interval 10.0)
   (:slime :level 3 :count 7 :interval 1.0)
-  (:bat :level 3 :count 7 :interval 0.5)))</property>
+  (:bat :level 3 :count 7 :interval 0.5))
+ ((nil :interval 10.0)
+  (:slime :level 4 :count 7 :interval 1.0)
+  (:bat :level 4 :count 7 :interval 0.5)
+  (:skeleton :level 4 :count 3 :interval 1.0))
+ ((nil :interval 10.0)
+  (:slime :level 5 :count 7 :interval 1.0)
+  (:bat :level 5 :count 7 :interval 0.5)
+  (:dragon :level 5 :count 3 :interval 1.0)))</property>
    </properties>
    <polyline points="0,0 0,-2400 1600,-2400 1600,-800 800,-800 800,-1600"/>
   </object>
