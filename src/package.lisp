@@ -82,7 +82,8 @@
   (-money 0 :type non-negative-fixnum)
   (towers nil :type list)
   (enemies nil :type list)
-  (objects nil :type list))
+  (objects nil :type list)
+  (game-over-p nil :type boolean))
 
 (defvar *game-scene-screen*)
 
@@ -141,7 +142,8 @@
   (setf (game-scene-screen--money screen) value))
 
 (defmethod eon:screen-render ((screen game-scene-screen))
-  (mapc (rcurry #'game-scene-tower-try-attack (game-scene-screen-enemies screen)) (game-scene-screen-towers screen))
+  (unless (game-scene-screen-game-over-p screen)
+    (mapc (rcurry #'game-scene-tower-try-attack (game-scene-screen-enemies screen)) (game-scene-screen-towers screen)))
   (raylib:clear-background raylib:+white+)
   (flet ((render-objects ()
            (let ((eon:*scene3d-camera* (game-scene-screen-camera screen)))
@@ -321,10 +323,10 @@
 (defun make-game-scene-enemy-hp-bar (&key target)
   (%make-game-scene-enemy-hp-bar :target target :size (raylib:make-vector2 :x 96.0 :y 12.0)))
 
-(defparameter *enemy-types* '((:dragon :animation (:idle "Dragon_Flying" :dead "Dragon_Death") :base-hp 150.0 :speed 1.0 :base-bounty 5000)
-                              (:slime :animation (:idle "Slime_Walk" :dead "Slime_Death") :base-hp 50.0 :speed 0.5 :base-bounty 750)
-                              (:bat :animation (:idle "Bat_Flying" :dead "Bat_Death") :base-hp 25.0 :speed 1.5 :base-bounty 500)
-                              (:skeleton :animation (:idle "Skeleton_Running" :dead "Skeleton_Death") :base-hp 50.0 :speed 0.75 :base-bounty 1500)))
+(defparameter *enemy-types* '((:dragon :animation (:idle "Dragon_Flying" :death "Dragon_Death" :attack "Dragon_Attack") :base-hp 150.0 :speed 1.0 :base-bounty 1000)
+                              (:slime :animation (:idle "Slime_Walk" :death "Slime_Death" :attack "Slime_Attack") :base-hp 50.0 :speed 0.5 :base-bounty 250)
+                              (:bat :animation (:idle "Bat_Flying" :death "Bat_Death" :attack "Bat_Attack") :base-hp 25.0 :speed 1.5 :base-bounty 250)
+                              (:skeleton :animation (:idle "Skeleton_Running" :death "Skeleton_Death" :attack "Skeleton_Attack") :base-hp 50.0 :speed 0.75 :base-bounty 500)))
 
 (defun game-scene-enemy-type-asset (type)
   (list :model (game-asset
@@ -407,10 +409,17 @@
   (promise:with-promise (succeed)
     (setf (ute:callback (game-scene-enemy-animation-tween enemy)) #'succeed)))
 
+(defun game-scene-enemy-promise-attack (enemy)
+  (async
+    (await (game-scene-enemy-promise-finish-animation enemy))
+    (setf (game-scene-enemy-active-animation enemy) (game-scene-enemy-find-animation enemy :attack))
+    (await (game-scene-enemy-promise-finish-animation enemy))
+    (setf (game-scene-enemy-active-animation enemy) nil)))
+
 (defun game-scene-enemy-promise-die (enemy)
   (async
     (await (game-scene-enemy-promise-finish-animation enemy))
-    (setf (game-scene-enemy-active-animation enemy) (game-scene-enemy-find-animation enemy :dead))
+    (setf (game-scene-enemy-active-animation enemy) (game-scene-enemy-find-animation enemy :death))
     (await (game-scene-enemy-promise-finish-animation enemy))
     (setf (game-scene-enemy-active-animation enemy) nil)
     (await (eon:promise-tween (ute:tween :to (((eon:integer-float (raylib:color-a (game-scene-enemy-color enemy)))) (0.0))
@@ -424,6 +433,51 @@
   (loop :for tower :in (game-scene-screen-towers screen)
         :when (eq (game-scene-tower-target tower) enemy)
           :do (setf (game-scene-tower-target tower) nil)))
+
+(defun game-over ()
+  (let* ((screenshot-1 (eon:take-screenshot))
+         (screenshot-2 (eon:load-asset 'raylib:image screenshot-1)))
+    (raylib:image-blur-gaussian screenshot-1 4)
+    (raylib:image-color-grayscale screenshot-1)
+    (let* ((screenshot-1 (eon:ensure-scene2d-node screenshot-1))
+           (screenshot-2 (eon:ensure-scene2d-node screenshot-2))
+           (prompt-label (eon:scene2d-construct (eon:scene2d-label :string "Press A to continue." 
+                                                                   :style (eon:scene2d-label-style
+                                                                           :text-style (eon:text-style :size 10.0 :spacing 2.0)
+                                                                           :color raylib:+raywhite+
+                                                                           :shadow nil :outline raylib:+darkgray+))))
+           (prompt-tween (ute:tween
+                          :to (((eon:integer-float (raylib:color-a (eon:scene2d-color prompt-label)))) (255.0))
+                          :repeat (:count t :yoyop t)
+                          :duration 0.5))
+           (cell (eon:scene2d-construct (eon:scene2d-cell
+                                         :size (#.(float +viewport-width+) #.(float +viewport-height+))
+                                         :child (eon:scene2d-box
+                                                 :orientation :vertical
+                                                 :children ((eon:scene2d-label :string "Game Over" :style (eon:scene2d-label-style
+                                                                                                           :text-style (eon:text-style :size 64.0 :spacing 8.0)
+                                                                                                           :color raylib:+raywhite+
+                                                                                                           :shadow nil :outline raylib:+darkgray+))
+                                                            (eon:scene2d-margin :top 16.0 :child prompt-label)))))))
+      (setf (raylib:color-a (eon:scene2d-color prompt-label)) 0)
+      (eon:scene2d-layout cell)
+      (setf (eon:current-screen) (lambda ()
+                                   (raylib:clear-background raylib:+white+)
+                                   (eon:scene2d-draw-simple screenshot-1)
+                                   (eon:scene2d-draw-simple screenshot-2)
+                                   (eon:scene2d-draw-simple cell)))
+      (async
+        (await (eon:promise-tween
+                (ute:timeline
+                 (:parallel
+                  (:to (((eon:integer-float (raylib:color-a (eon:scene2d-color screenshot-2)))) (0.0))
+                   :duration 0.5)
+                  (:from (((raylib:vector2-y (eon:scene2d-position cell))) (#.(- (float +viewport-height+))))
+                   :ease #'ute:bounce-out
+                   :duration 1.0)))))
+        (loop :initially (ute:start prompt-tween)
+              :until (eq (await (eon:promise-pressed-key)) :a)
+              :finally (ute:kill prompt-tween))))))
 
 (defun game-scene-enemy-updater (enemy screen)
   (with-accessors ((path game-scene-enemy-path)) enemy
@@ -448,13 +502,21 @@
           (function (funcall (pop path)))))
       (cond
         ((null path)
-         (setf (game-scene-enemy-active-animation enemy) nil)
-         (game-scene-screen-remove-enemy screen enemy)
+         (async
+           (push :b eon::*key-queue*)
+           (game-scene-screen-look-at screen (game-scene-enemy-position enemy))
+           (setf (game-scene-screen-game-over-p screen) t)
+           (loop :for enemy :in (game-scene-screen-enemies screen)
+                 :do (setf (game-scene-enemy-speed enemy) 0.0))
+           (await (game-scene-enemy-promise-attack enemy))
+           (setf (game-scene-enemy-active-animation enemy) nil)
+           (game-scene-screen-remove-enemy screen enemy)
+           (game-over))
          nil)
         ((not (plusp (game-scene-enemy-hp enemy)))
          (async
            (await (game-scene-enemy-promise-die enemy))
-           (incf (game-scene-screen-money screen) (* (game-scene-enemy-base-bounty enemy) (floor (+ (game-scene-enemy-level enemy) 2) 3)))
+           (incf (game-scene-screen-money screen) (* (game-scene-enemy-base-bounty enemy) (floor (+ (game-scene-enemy-level enemy) 7) 8)))
            (setf (game-scene-enemy-active-animation enemy) nil)
            (game-scene-screen-remove-enemy screen enemy))
          nil)
@@ -674,7 +736,7 @@
              (screen (make-game-scene-screen :map-renderer (eon:tiled-map-renderer map))))
         (eon:scene2d-layout (game-scene-screen-ui screen))
         (with-accessors ((money game-scene-screen-money)) screen
-          (setf (game-scene-screen-money screen) 5000)
+          (setf (game-scene-screen-money screen) 2500)
           (loop :with group := (eon:scene2d-construct (eon:scene2d-group))
                 :for cell :in (tiled:layer-cells (find "ground" (tiled:map-layers map) :key #'tiled:layer-name :test #'string=))
                 :when (gethash "base" (tiled:properties (tiled:cell-tile cell)))
@@ -708,6 +770,7 @@
                 (loop :with focus-manager := (game-scene-screen-tower-base-focus-manager screen)
                       :with ui-group := (game-scene-ui-group (game-scene-screen-ui screen))
                       :for key := (await (eon:promise-pressed-key))
+                      :until (game-scene-screen-game-over-p screen)
                       :do (case key
                             ((:left :right :up :down)
                              (unselect-tower (eon::scene2d-focusable-content (eon:scene2d-focus-manager-focused focus-manager)))
@@ -829,6 +892,7 @@
                                                                (loop :for enemy-desc :in (nth wave-index waves-desc)
                                                                      :do (destructuring-bind (type &key (interval 1.0) (count 1) (level 1)) enemy-desc
                                                                            (loop :repeat count
+                                                                                 :until (game-scene-screen-game-over-p screen)
                                                                                  :when type
                                                                                    :do (push
                                                                                         (let ((enemy (make-game-scene-enemy
