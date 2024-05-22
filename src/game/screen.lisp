@@ -39,7 +39,33 @@
                                  :child (eon:scene2d-box
                                          :orientation :horizontal
                                          :children ((eon:scene2d-label :string "$ ")
-                                                    (eon:scene2d-label :string "0" :name label-money)))))))))
+                                                    (eon:scene2d-label :string "0" :name label-money))))))
+                (eon:scene2d-cell
+                 :name cell-enemy-info
+                 :size (#.(float +viewport-width+) #.(float +viewport-height+))
+                 :alignment (:end :end)
+                 :child (eon:scene2d-window
+                         :child (eon:scene2d-margin
+                                 :top 2.0 :bottom 2.0 :left 2.0 :right 2.0
+                                 :child (eon:scene2d-box
+                                         :name enemy-info-box
+                                         :orientation :vertical
+                                         :alignment (:end :center)
+                                         :children ((eon:scene2d-box
+                                                     :orientation :horizontal
+                                                     :children ((eon:scene2d-label :string "Wave: ")
+                                                                (eon:scene2d-label :string "0" :name label-wave-number)
+                                                                (eon:scene2d-label :string "/")
+                                                                (eon:scene2d-label :string "0" :name label-wave-count))))))))
+                (eon:scene2d-cell
+                 :size (#.(float +viewport-width+) #.(float +viewport-height+))
+                 :child (eon:scene2d-label
+                         :name label-level
+                         :string "Level 1"
+                         :style (eon:scene2d-label-style
+                                 :text-style (eon:text-style :size 64.0 :spacing 8.0)
+                                 :color raylib:+raywhite+
+                                 :shadow nil :outline raylib:+darkgray+))))))
 
 (defstruct game-scene-screen
   (scene (make-instance 'game-scene) :type game-scene)

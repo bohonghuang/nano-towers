@@ -108,6 +108,7 @@
   (let* ((map (tiled:load-map (game-asset (format nil "maps/level-~D.tmx" level))))
          (scene (make-instance 'game-scene :map-renderer (eon:tiled-map-renderer map)))
          (screen (make-game-scene-screen :scene scene))
+         (ui (game-scene-screen-ui screen))
          (context (game-scene-context scene)))
     (eon:scene2d-layout (game-scene-screen-ui screen))
     (let ((paths (game-scene-map-enemy-paths map)))
@@ -130,167 +131,199 @@
                                      :repeat t))))
                   (ute:start timeline))
                 (push billboard (game-context-objects context)))
-      (async
-        (loop :for wave-index :below (reduce #'max paths :key (compose #'length #'cdr))
-              :do (await (apply #'ajoin (loop :for (path . waves-desc) :in paths
-                                              :collect (let ((path path)
-                                                             (waves-desc waves-desc))
-                                                         (async
-                                                           (loop :for enemy-desc :in (nth wave-index waves-desc)
-                                                                 :do (destructuring-bind (type &key (interval 1.0) (count 1) (level 1)) enemy-desc
-                                                                       (loop :repeat count
-                                                                             :until (game-context-result context)
-                                                                             :when type
-                                                                               :do (push
-                                                                                    (let ((enemy (make-game-scene-enemy
-                                                                                                  :scene scene
-                                                                                                  :position (raylib:copy-vector3 (first path))
-                                                                                                  :type type
-                                                                                                  :level level
-                                                                                                  :path (rest path))))
-                                                                                      (eon:add-game-loop-hook (game-scene-enemy-updater enemy) :after #'identity)
-                                                                                      (setf (game-scene-enemy-active-animation enemy) (game-scene-enemy-find-animation enemy :idle))
-                                                                                      enemy)
-                                                                                    (game-context-enemies context))
-                                                                             :do (await (eon:promise-sleep interval))))))))))
-                  (await (promise-wait-for-all-enemies-dead context)))
-        (unless (game-context-result context)
-          (setf (game-context-result context) :success)
-          (await (promise-cancel-all-input)))))
-    (with-accessors ((money game-context-money)) context
-      (setf money 2500)
-      (let ((focus-manager (loop :with group := (eon:scene2d-construct (eon:scene2d-group))
-                                 :for cell :in (tiled:layer-cells (find "ground" (tiled:map-layers map) :key #'tiled:layer-name :test #'string=))
-                                 :when (gethash "base" (tiled:properties (tiled:cell-tile cell)))
-                                   :do (push (make-game-scene-tower
-                                              :scene scene
-                                              :position (position-2d->3d
-                                                         (raylib:make-vector2
-                                                          :x (+ (coerce (tiled:cell-column cell) 'single-float) 0.5)
-                                                          :y (+ (coerce (tiled:cell-row cell) 'single-float) 0.5))))
-                                             (game-context-towers context))
-                                   :and :collect (eon::make-scene2d-focusable
-                                                  :focus-point (raylib:make-vector2
-                                                                :x (coerce (tiled:cell-column cell) 'single-float)
-                                                                :y (coerce (tiled:cell-row cell) 'single-float))
-                                                  :content (first (game-context-towers context)))
-                                          :into focusables
-                                 :finally (return (eon:make-scene2d-focus-manager :focusables focusables))))
-            (selected-tower nil))
-        (flet ((unselect-tower (tower)
-                 (setf (game-scene-tower-selectedp tower) nil))
-               (select-tower (tower)
-                 (setf (game-scene-tower-selectedp (setf selected-tower tower)) t)
-                 (basic-scene-look-at scene (game-scene-tower-position tower)))
-               (tower-screen-position (&optional (tower selected-tower))
-                 (raylib:get-world-to-screen-ex
-                  (game-scene-tower-position tower)
-                  (basic-scene-camera scene)
-                  +viewport-width+ +viewport-height+)))
-          (select-tower (lastcar (game-context-towers context)))
-          (async
-            (await (eon:promise-transition-screen screen))
-            (loop :with ui-group := (game-scene-ui-group (game-scene-screen-ui screen))
-                  :for key := (await (eon:promise-pressed-key))
-                  :until (game-context-result context)
-                  :do (case key
-                        ((:left :right :up :down)
-                         (unselect-tower (eon::scene2d-focusable-content (eon:scene2d-focus-manager-focused focus-manager)))
-                         (eon:scene2d-focus-manager-handle-key focus-manager key)
-                         (select-tower (eon::scene2d-focusable-content (eon:scene2d-focus-manager-focused focus-manager))))
-                        (:a
-                         (let* ((operations (append
-                                             (cond
-                                               ((null (game-scene-tower-type selected-tower)) '(build))
-                                               ((< (game-scene-tower-level selected-tower) 3) '(upgrade)))
-                                             (when (game-scene-tower-type selected-tower) '(demolish))
-                                             '(cancel)))
-                                (select-box (eon:scene2d-construct
-                                             (eon:select-box
-                                              :entries (mapcar #'symbol-name operations))))
-                                (operation-selector (eon:scene2d-construct (eon:scene2d-window :child select-box))))
-                           (raylib:copy-vector2
-                            (tower-screen-position)
-                            (eon:scene2d-position operation-selector))
-                           (eon:scene2d-layout operation-selector)
-                           (with-popped-ui (ui-group operation-selector)
-                             (when-let ((index (await (eon:select-box-promise-index select-box))))
-                               (ecase (nth index operations)
-                                 (build
-                                  (let* ((tower-select-box (let ((table (eon:scene2d-construct (eon:scene2d-table))))
-                                                             (dolist (tower-type *tower-types*)
-                                                               (destructuring-bind (type &key cost &allow-other-keys) tower-type
-                                                                 (eon:scene2d-table-newline table)
-                                                                 (eon:scene2d-table-add-child
-                                                                  table
-                                                                  (eon:scene2d-construct
-                                                                   (eon:scene2d-label :string (symbol-name type))))
-                                                                 (eon:scene2d-table-add-child
-                                                                  table
-                                                                  (eon:scene2d-construct
-                                                                   (eon:scene2d-margin
-                                                                    :left 16.0
-                                                                    :right 2.0
-                                                                    :top 1.0
-                                                                    :bottom 1.0
-                                                                    :child (eon:scene2d-label :string "$"))))
-                                                                 (eon:scene2d-table-add-child
-                                                                  table
-                                                                  (eon:scene2d-construct
-                                                                   (eon:scene2d-label :string (princ-to-string (assoc-value cost 1)))))))
-                                                             (eon:table-select-box table)))
-                                         (tower-selector (eon:scene2d-construct
-                                                          (eon:scene2d-window :child tower-select-box))))
-                                    (eon:scene2d-layout tower-selector)
-                                    (raylib:copy-vector2
-                                     (tower-screen-position)
-                                     (eon:scene2d-position tower-selector))
-                                    (with-popped-ui (ui-group tower-selector)
-                                      (when-let ((index (await (eon:select-box-promise-index tower-select-box))))
-                                        (destructuring-bind (type &key cost &allow-other-keys) (nth index *tower-types*)
-                                          (setf cost (assoc-value cost 1))
+      (flet ((promise-spawn-enemies ()
+               (async
+                 (loop :with wave-count := (reduce #'max paths :key (compose #'length #'cdr))
+                       :initially (setf (eon:scene2d-label-string (game-scene-ui-label-wave-count ui)) (princ-to-string wave-count))
+                       :for wave-index :below wave-count
+                       :do (setf (eon:scene2d-label-string (game-scene-ui-label-wave-number ui)) (princ-to-string (1+ wave-index)))
+                           (eon:scene2d-layout (game-scene-ui-cell-enemy-info ui))
+                           (await (apply #'ajoin (loop :for (path . waves-desc) :in paths
+                                                       :collect (let ((path path)
+                                                                      (waves-desc waves-desc))
+                                                                  (async
+                                                                    (loop :for enemy-desc :in (nth wave-index waves-desc)
+                                                                          :for enemy-desc-index :from 0
+                                                                          :do (destructuring-bind (type &key (interval 1.0) (count 1) (level 1)) enemy-desc
+                                                                                (loop :repeat count
+                                                                                      :until (game-context-result context)
+                                                                                      :if type
+                                                                                        :do (push
+                                                                                             (let ((enemy (make-game-scene-enemy
+                                                                                                           :scene scene
+                                                                                                           :position (raylib:copy-vector3 (first path))
+                                                                                                           :type type
+                                                                                                           :level level
+                                                                                                           :path (rest path))))
+                                                                                               (eon:add-game-loop-hook (game-scene-enemy-updater enemy) :after #'identity)
+                                                                                               (setf (game-scene-enemy-active-animation enemy) (game-scene-enemy-find-animation enemy :idle))
+                                                                                               enemy)
+                                                                                             (game-context-enemies context))
+                                                                                      :else :if (zerop enemy-desc-index)
+                                                                                              :do (let ((box (game-scene-ui-enemy-info-box ui))
+                                                                                                        (label (eon:scene2d-construct (eon:scene2d-label :string ""))))
+                                                                                                    (async
+                                                                                                      (loop :initially (eon:scene2d-box-add-child box label)
+                                                                                                            :for time :from (floor interval) :downto 1
+                                                                                                            :do (setf (eon:scene2d-label-string label) (format nil "Time Remaining for Next Wave of Enemies: ~Ds" time))
+                                                                                                                (eon:scene2d-layout (game-scene-ui-cell-enemy-info ui))
+                                                                                                                (await (eon:promise-sleep 1.0))
+                                                                                                            :finally
+                                                                                                               (eon:scene2d-box-remove-child box label)
+                                                                                                               (eon:scene2d-layout (game-scene-ui-cell-enemy-info ui)))))
+                                                                                      :do (await (eon:promise-sleep interval))))))))))
+                           (await (promise-wait-for-all-enemies-dead context)))
+                 (unless (game-context-result context)
+                   (setf (game-context-result context) :success)
+                   (await (promise-cancel-all-input))))))
+        (with-accessors ((money game-context-money)) context
+          (setf money 2500)
+          (let ((focus-manager (loop :with group := (eon:scene2d-construct (eon:scene2d-group))
+                                     :for cell :in (tiled:layer-cells (find "ground" (tiled:map-layers map) :key #'tiled:layer-name :test #'string=))
+                                     :when (gethash "base" (tiled:properties (tiled:cell-tile cell)))
+                                       :do (push (make-game-scene-tower
+                                                  :scene scene
+                                                  :position (position-2d->3d
+                                                             (raylib:make-vector2
+                                                              :x (+ (coerce (tiled:cell-column cell) 'single-float) 0.5)
+                                                              :y (+ (coerce (tiled:cell-row cell) 'single-float) 0.5))))
+                                                 (game-context-towers context))
+                                       :and :collect (eon::make-scene2d-focusable
+                                                      :focus-point (raylib:make-vector2
+                                                                    :x (coerce (tiled:cell-column cell) 'single-float)
+                                                                    :y (coerce (tiled:cell-row cell) 'single-float))
+                                                      :content (first (game-context-towers context)))
+                                              :into focusables
+                                     :finally (return (eon:make-scene2d-focus-manager :focusables focusables))))
+                (selected-tower nil))
+            (flet ((unselect-tower (tower)
+                     (setf (game-scene-tower-selectedp tower) nil))
+                   (select-tower (tower)
+                     (setf (game-scene-tower-selectedp (setf selected-tower tower)) t)
+                     (basic-scene-look-at scene (game-scene-tower-position tower)))
+                   (tower-screen-position (&optional (tower selected-tower))
+                     (raylib:get-world-to-screen-ex
+                      (game-scene-tower-position tower)
+                      (basic-scene-camera scene)
+                      +viewport-width+ +viewport-height+)))
+              (select-tower (lastcar (game-context-towers context)))
+              (async
+                (setf (raylib:color-a (eon:scene2d-color (game-scene-ui-label-level ui))) 0
+                      (eon:scene2d-label-string (game-scene-ui-label-level ui)) (format nil "Level ~D" level))
+                (await (eon:promise-transition-screen screen))
+                (await (eon:promise-tween
+                        (let ((position (eon:scene2d-position (game-scene-ui-label-level ui)))
+                              (color (eon:scene2d-color (game-scene-ui-label-level ui))))
+                          (ute:timeline
+                           (:sequence
+                            (:to (((eon:integer-float (raylib:color-a color))) (255.0)))
+                            (:from (((raylib:vector2-y position)) (#.(float +viewport-height+)))
+                             :duration 1.0 :relativep t :ease #'ute:elastic-out)
+                            (:pause 0.5)
+                            (:to (((eon:integer-float (raylib:color-a color))) (0.0))
+                             :duration 0.5))))))
+                (promise-spawn-enemies)
+                (loop :with ui-group := (game-scene-ui-group (game-scene-screen-ui screen))
+                      :for key := (await (eon:promise-pressed-key))
+                      :until (game-context-result context)
+                      :do (case key
+                            ((:left :right :up :down)
+                             (unselect-tower (eon::scene2d-focusable-content (eon:scene2d-focus-manager-focused focus-manager)))
+                             (eon:scene2d-focus-manager-handle-key focus-manager key)
+                             (select-tower (eon::scene2d-focusable-content (eon:scene2d-focus-manager-focused focus-manager))))
+                            (:a
+                             (let* ((operations (append
+                                                 (cond
+                                                   ((null (game-scene-tower-type selected-tower)) '(build))
+                                                   ((< (game-scene-tower-level selected-tower) 3) '(upgrade)))
+                                                 (when (game-scene-tower-type selected-tower) '(demolish))
+                                                 '(cancel)))
+                                    (select-box (eon:scene2d-construct
+                                                 (eon:select-box
+                                                  :entries (mapcar #'symbol-name operations))))
+                                    (operation-selector (eon:scene2d-construct (eon:scene2d-window :child select-box))))
+                               (raylib:copy-vector2
+                                (tower-screen-position)
+                                (eon:scene2d-position operation-selector))
+                               (eon:scene2d-layout operation-selector)
+                               (with-popped-ui (ui-group operation-selector)
+                                 (when-let ((index (await (eon:select-box-promise-index select-box))))
+                                   (ecase (nth index operations)
+                                     (build
+                                      (let* ((tower-select-box (let ((table (eon:scene2d-construct (eon:scene2d-table))))
+                                                                 (dolist (tower-type *tower-types*)
+                                                                   (destructuring-bind (type &key cost &allow-other-keys) tower-type
+                                                                     (eon:scene2d-table-newline table)
+                                                                     (eon:scene2d-table-add-child
+                                                                      table
+                                                                      (eon:scene2d-construct
+                                                                       (eon:scene2d-label :string (symbol-name type))))
+                                                                     (eon:scene2d-table-add-child
+                                                                      table
+                                                                      (eon:scene2d-construct
+                                                                       (eon:scene2d-margin
+                                                                        :left 16.0
+                                                                        :right 2.0
+                                                                        :top 1.0
+                                                                        :bottom 1.0
+                                                                        :child (eon:scene2d-label :string "$"))))
+                                                                     (eon:scene2d-table-add-child
+                                                                      table
+                                                                      (eon:scene2d-construct
+                                                                       (eon:scene2d-label :string (princ-to-string (assoc-value cost 1)))))))
+                                                                 (eon:table-select-box table)))
+                                             (tower-selector (eon:scene2d-construct
+                                                              (eon:scene2d-window :child tower-select-box))))
+                                        (eon:scene2d-layout tower-selector)
+                                        (raylib:copy-vector2
+                                         (tower-screen-position)
+                                         (eon:scene2d-position tower-selector))
+                                        (with-popped-ui (ui-group tower-selector)
+                                          (when-let ((index (await (eon:select-box-promise-index tower-select-box))))
+                                            (destructuring-bind (type &key cost &allow-other-keys) (nth index *tower-types*)
+                                              (setf cost (assoc-value cost 1))
+                                              (if (<= cost money)
+                                                  (progn
+                                                    (decf money cost)
+                                                    (setf (game-scene-tower-type selected-tower) type
+                                                          (game-scene-tower-level selected-tower) 1)
+                                                    (game-scene-tower-update selected-tower))
+                                                  (await (promise-confirm-message "WARNING" "You don't have enough money to build this tower!" ui-group))))))))
+                                     (upgrade
+                                      (let ((cost (assoc-value
+                                                   (getf (assoc-value *tower-types* (game-scene-tower-type selected-tower)) :cost)
+                                                   (1+ (game-scene-tower-level selected-tower)))))
+                                        (when (await
+                                               (promise-yes-or-no-p
+                                                "CONFIRMATION"
+                                                (format nil "Do you want to spend $~D to upgrade this tower?" cost)
+                                                ui-group))
                                           (if (<= cost money)
                                               (progn
                                                 (decf money cost)
-                                                (setf (game-scene-tower-type selected-tower) type
-                                                      (game-scene-tower-level selected-tower) 1)
+                                                (incf (game-scene-tower-level selected-tower))
                                                 (game-scene-tower-update selected-tower))
-                                              (await (promise-confirm-message "WARNING" "You don't have enough money to build this tower!" ui-group))))))))
-                                 (upgrade
-                                  (let ((cost (assoc-value
-                                               (getf (assoc-value *tower-types* (game-scene-tower-type selected-tower)) :cost)
-                                               (1+ (game-scene-tower-level selected-tower)))))
-                                    (when (await
-                                           (promise-yes-or-no-p
-                                            "CONFIRMATION"
-                                            (format nil "Do you want to spend $~D to upgrade this tower?" cost)
-                                            ui-group))
-                                      (if (<= cost money)
-                                          (progn
-                                            (decf money cost)
-                                            (incf (game-scene-tower-level selected-tower))
-                                            (game-scene-tower-update selected-tower))
-                                          (await (promise-confirm-message "WARNING" "You don't have enough money to upgrade this tower!" ui-group))))))
-                                 (demolish
-                                  (let ((refund (let* ((level-cost (getf (assoc-value *tower-types* (game-scene-tower-type selected-tower)) :cost))
-                                                       (end (position (game-scene-tower-level selected-tower) level-cost :key #'car)))
-                                                  (floor (reduce #'+ (subseq level-cost 0 (1+ end)) :key #'cdr) 2))))
-                                    (when (await
-                                           (promise-yes-or-no-p
-                                            "CONFIRMATION"
-                                            (format nil "Do you want to demolish this tower to receive $~D?" refund)
-                                            ui-group))
-                                      (incf money refund)
-                                      (setf (game-scene-tower-level selected-tower) 0
-                                            (game-scene-tower-type selected-tower) nil)
-                                      (game-scene-tower-update selected-tower))))
-                                 (cancel))))))))
-            (when (eq (game-context-result context) :failure)
-              (await (eon:promise-sleep 2.0))
-              (await (promise-confirm-game-over)))
-            (loop :for enemy :in (game-context-enemies context)
-                  :do (setf (game-scene-enemy-active-animation enemy) nil))
-            (setf (game-context-enemies context) nil
-                  (game-context-objects context) nil
-                  (game-context-towers context) nil)
-            (eq (game-context-result context) :success)))))))
+                                              (await (promise-confirm-message "WARNING" "You don't have enough money to upgrade this tower!" ui-group))))))
+                                     (demolish
+                                      (let ((refund (let* ((level-cost (getf (assoc-value *tower-types* (game-scene-tower-type selected-tower)) :cost))
+                                                           (end (position (game-scene-tower-level selected-tower) level-cost :key #'car)))
+                                                      (floor (reduce #'+ (subseq level-cost 0 (1+ end)) :key #'cdr) 2))))
+                                        (when (await
+                                               (promise-yes-or-no-p
+                                                "CONFIRMATION"
+                                                (format nil "Do you want to demolish this tower to receive $~D?" refund)
+                                                ui-group))
+                                          (incf money refund)
+                                          (setf (game-scene-tower-level selected-tower) 0
+                                                (game-scene-tower-type selected-tower) nil)
+                                          (game-scene-tower-update selected-tower))))
+                                     (cancel))))))))
+                (when (eq (game-context-result context) :failure)
+                  (await (eon:promise-sleep 2.0))
+                  (await (promise-confirm-game-over)))
+                (loop :for enemy :in (game-context-enemies context)
+                      :do (setf (game-scene-enemy-active-animation enemy) nil))
+                (setf (game-context-enemies context) nil
+                      (game-context-objects context) nil
+                      (game-context-towers context) nil)
+                (eq (game-context-result context) :success)))))))))
