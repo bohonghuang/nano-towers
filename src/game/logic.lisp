@@ -1,6 +1,6 @@
 (in-package #:spring-lisp-game-jam-2024)
 
-(defun game-over ()
+(defun promise-confirm-game-over ()
   (let* ((screenshot-1 (eon:take-screenshot))
          (screenshot-2 (eon:load-asset 'raylib:image screenshot-1)))
     (raylib:image-blur-gaussian screenshot-1 4)
@@ -94,13 +94,69 @@
       (with-popped-ui (group window)
         (eql (await (eon:select-box-promise-index (message-window-select-box window))) 0)))))
 
-(defun game ()
+(defun promise-wait-for-all-enemies-dead (context)
+  (promise:with-promise (succeed)
+    (eon:add-game-loop-hook
+     (lambda ()
+       (if (game-context-enemies context)
+           (game-context-result context)
+           (succeed)))
+     :after #'not)))
+
+(defun promise-play-level (&optional (level 1))
   #+sbcl (declare (sb-ext:muffle-conditions style-warning sb-ext:compiler-note))
-  (let* ((map (tiled:load-map (game-asset #P"maps/map-1.tmx")))
+  (let* ((map (tiled:load-map (game-asset (format nil "maps/level-~D.tmx" level))))
          (scene (make-instance 'game-scene :map-renderer (eon:tiled-map-renderer map)))
          (screen (make-game-scene-screen :scene scene))
          (context (game-scene-context scene)))
     (eon:scene2d-layout (game-scene-screen-ui screen))
+    (let ((paths (game-scene-map-enemy-paths map)))
+      (loop :with sprites := (eon:array-vector (eon:split-texture (eon:load-asset 'raylib:texture (game-asset #P"flag.png")) '(1 5)))
+            :for (path . nil) :in paths
+            :for billboard := (eon:make-scene3d-billboard
+                               :content (first-elt sprites)
+                               :position (raylib:copy-vector3 (lastcar path))
+                               :origin (raylib:make-vector3
+                                        :x (/ (eon:texture-region-width (first-elt sprites)) 8.0)
+                                        :y (eon:texture-region-height (first-elt sprites))
+                                        :z 0.0)
+                               :scale (raylib:vector3-scale (raylib:vector3-one) (/ 2.0 (eon:texture-region-height (first-elt sprites)))))
+            :do (letrec ((timeline (ute:timeline
+                                    (:sequence
+                                     (:tween (eon:scene3d-billboard-tween-frames billboard sprites :duration 0.5))
+                                     (:call (lambda ()
+                                              (unless (find billboard (game-context-objects context))
+                                                (ute:kill timeline))))
+                                     :repeat t))))
+                  (ute:start timeline))
+                (push billboard (game-context-objects context)))
+      (async
+        (loop :for wave-index :below (reduce #'max paths :key (compose #'length #'cdr))
+              :do (await (apply #'ajoin (loop :for (path . waves-desc) :in paths
+                                              :collect (let ((path path)
+                                                             (waves-desc waves-desc))
+                                                         (async
+                                                           (loop :for enemy-desc :in (nth wave-index waves-desc)
+                                                                 :do (destructuring-bind (type &key (interval 1.0) (count 1) (level 1)) enemy-desc
+                                                                       (loop :repeat count
+                                                                             :until (game-context-result context)
+                                                                             :when type
+                                                                               :do (push
+                                                                                    (let ((enemy (make-game-scene-enemy
+                                                                                                  :scene scene
+                                                                                                  :position (raylib:copy-vector3 (first path))
+                                                                                                  :type type
+                                                                                                  :level level
+                                                                                                  :path (rest path))))
+                                                                                      (eon:add-game-loop-hook (game-scene-enemy-updater enemy) :after #'identity)
+                                                                                      (setf (game-scene-enemy-active-animation enemy) (game-scene-enemy-find-animation enemy :idle))
+                                                                                      enemy)
+                                                                                    (game-context-enemies context))
+                                                                             :do (await (eon:promise-sleep interval))))))))))
+                  (await (promise-wait-for-all-enemies-dead context)))
+        (unless (game-context-result context)
+          (setf (game-context-result context) :success)
+          (await (promise-cancel-all-input)))))
     (with-accessors ((money game-context-money)) context
       (setf money 2500)
       (let ((focus-manager (loop :with group := (eon:scene2d-construct (eon:scene2d-group))
@@ -133,9 +189,10 @@
                   +viewport-width+ +viewport-height+)))
           (select-tower (lastcar (game-context-towers context)))
           (async
+            (await (eon:promise-transition-screen screen))
             (loop :with ui-group := (game-scene-ui-group (game-scene-screen-ui screen))
                   :for key := (await (eon:promise-pressed-key))
-                  :until (game-context-game-over-p context)
+                  :until (game-context-result context)
                   :do (case key
                         ((:left :right :up :down)
                          (unselect-tower (eon::scene2d-focusable-content (eon:scene2d-focus-manager-focused focus-manager)))
@@ -227,48 +284,13 @@
                                       (setf (game-scene-tower-level selected-tower) 0
                                             (game-scene-tower-type selected-tower) nil)
                                       (game-scene-tower-update selected-tower))))
-                                 (cancel))))))))))))
-    (let ((paths (game-scene-map-enemy-paths map)))
-      (loop :with sprites := (eon:array-vector (eon:split-texture (eon:load-asset 'raylib:texture (game-asset #P"flag.png")) '(1 5)))
-            :for (path . nil) :in paths
-            :for billboard := (eon:make-scene3d-billboard
-                               :content (first-elt sprites)
-                               :position (raylib:copy-vector3 (lastcar path))
-                               :origin (raylib:make-vector3
-                                        :x (/ (eon:texture-region-width (first-elt sprites)) 8.0)
-                                        :y (eon:texture-region-height (first-elt sprites))
-                                        :z 0.0)
-                               :scale (raylib:vector3-scale (raylib:vector3-one) (/ 2.0 (eon:texture-region-height (first-elt sprites)))))
-            :do (letrec ((timeline (ute:timeline
-                                    (:sequence
-                                     (:tween (eon:scene3d-billboard-tween-frames billboard sprites :duration 0.5))
-                                     (:call (lambda ()
-                                              (unless (find billboard (game-context-objects context))
-                                                (ute:kill timeline))))
-                                     :repeat t))))
-                  (ute:start timeline))
-                (push billboard (game-context-objects context)))
-      (async
-        (loop :for wave-index :below (reduce #'max paths :key (compose #'length #'cdr))
-              :do (await (apply #'ajoin (loop :for (path . waves-desc) :in paths
-                                              :collect (let ((path path)
-                                                             (waves-desc waves-desc))
-                                                         (async
-                                                           (loop :for enemy-desc :in (nth wave-index waves-desc)
-                                                                 :do (destructuring-bind (type &key (interval 1.0) (count 1) (level 1)) enemy-desc
-                                                                       (loop :repeat count
-                                                                             :until (game-context-game-over-p context)
-                                                                             :when type
-                                                                               :do (push
-                                                                                    (let ((enemy (make-game-scene-enemy
-                                                                                                  :scene scene
-                                                                                                  :position (raylib:copy-vector3 (first path))
-                                                                                                  :type type
-                                                                                                  :level level
-                                                                                                  :path (rest path))))
-                                                                                      (eon:add-game-loop-hook (game-scene-enemy-updater enemy) :after #'identity)
-                                                                                      (setf (game-scene-enemy-active-animation enemy) (game-scene-enemy-find-animation enemy :idle))
-                                                                                      enemy)
-                                                                                    (game-context-enemies context))
-                                                                             :do (await (eon:promise-sleep interval)))))))))))))
-    (setf (eon:current-screen) screen)))
+                                 (cancel))))))))
+            (when (eq (game-context-result context) :failure)
+              (await (eon:promise-sleep 2.0))
+              (await (promise-confirm-game-over)))
+            (loop :for enemy :in (game-context-enemies context)
+                  :do (setf (game-scene-enemy-active-animation enemy) nil))
+            (setf (game-context-enemies context) nil
+                  (game-context-objects context) nil
+                  (game-context-towers context) nil)
+            (eq (game-context-result context) :success)))))))

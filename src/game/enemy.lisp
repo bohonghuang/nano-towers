@@ -189,15 +189,13 @@
         (cond
           ((null path)
            (async
-             (push :b eon::*key-queue*)
+             (setf (game-context-result context) :failure)
+             (await (promise-cancel-all-input))
              (basic-scene-look-at scene (game-scene-enemy-position enemy))
-             (setf (game-context-game-over-p context) t)
              (loop :for enemy :in (game-context-enemies context)
                    :do (setf (game-scene-enemy-speed enemy) 0.0))
              (await (game-scene-enemy-promise-attack enemy))
-             (setf (game-scene-enemy-active-animation enemy) nil)
-             (game-context-remove-enemy context enemy)
-             (game-over))
+             (setf (game-scene-enemy-active-animation enemy) nil))
            nil)
           ((not (plusp (game-scene-enemy-hp enemy)))
            (async

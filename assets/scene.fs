@@ -22,7 +22,7 @@ void main() {
   vec4 texelColor = texture(texture0, fragTexCoord);
   if (texelColor.a == 0.0) discard;
   
-  float diffuseIntensity = abs(dot(lightVector, fragNormal));
+  float diffuseIntensity = (1.0 - dot(lightVector, fragNormal)) / 2.0;
   vec4 materialColor = texelColor * colDiffuse;
   finalColor = colEmission * materialColor;
   vec4 diffuseColor = vec4(materialColor.rgb, 1.0) * colLight * diffuseIntensity;

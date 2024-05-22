@@ -79,7 +79,7 @@
   (assoc-value (getf (assoc-value *tower-types* (game-scene-tower-type tower)) :power) (game-scene-tower-level tower)))
 
 (defun apply-model-shader (model shader)
-  (dolist (material (cobj:ccoerce (cobj:cpointer-carray (raylib:model-materials model) (raylib:model-material-count model)) 'list))
+  (dolist (material (cobj:ccoerce (cobj:cpointer-carray (raylib:model-materials model) (raylib:model-material-count model)) 'list) model)
     (setf (raylib:material-shader material) shader)))
 
 (defun game-scene-tower-update-model (tower)

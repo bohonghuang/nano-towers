@@ -39,3 +39,12 @@
   (raylib:make-vector2
    :x (raylib:vector3-x position)
    :y (raylib:vector3-z position)))
+
+(defun promise-cancel-all-input ()
+  (promise:with-promise (succeed)
+    (eon:add-game-loop-hook
+     (lambda ()
+       (if eon::*key-queue*
+           (prog1 (setf eon::*key-queue* nil) (succeed))
+           (push :b eon::*key-queue*)))
+     :after #'identity)))

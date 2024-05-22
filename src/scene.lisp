@@ -31,13 +31,13 @@
 (cobj:define-global-cobject +shadow-light-camera-default+
     (raylib:make-camera-3d :position +light-position-default+
                            :target (raylib:make-vector3 :x 0.0 :y 0.0 :z 0.0)
-                           :up (raylib:make-vector3 :x 0.0 :y 1.0 :z 0.0) :fovy 10.0
+                           :up (raylib:make-vector3 :x 0.0 :y 1.0 :z 0.0) :fovy 15.0
                            :projection (cffi:foreign-enum-value 'raylib:camera-projection :orthographic)))
 
 (defmethod initialize-instance :around ((scene basic-scene) &rest args)
   (declare (ignore args))
   (let* ((light-camera (raylib:copy-camera +shadow-light-camera-default+))
-         (shadow (eon:make-shadow-map-renderer :camera light-camera :size (raylib:make-vector2 :x 1024.0 :y 512.0))))
+         (shadow (eon:make-shadow-map-renderer :camera light-camera :size (raylib:make-vector2 :x 1024.0 :y 1024.0))))
     (let ((*basic-scene-shader-uniforms-shadow-map* (eon:shadow-map-renderer-texture shadow)))
       (call-next-method))
     (setf (basic-scene-shadow scene) shadow (basic-scene-light-camera scene) light-camera)
@@ -52,6 +52,13 @@
 
 (defmethod eon:scene3d-draw ((scene basic-scene) position origin scale rotation tint)
   (declare (ignore position origin scale rotation tint))
+  (let ((camera (basic-scene-camera scene))
+        (light-camera (basic-scene-light-camera scene))
+        (light-vector (basic-scene-light-vector scene)))
+    (setf (raylib:camera-target light-camera) (raylib:camera-position camera))
+    (clet ((position (raylib:vector3-subtract (raylib:camera-target light-camera) (raylib:vector3-scale light-vector 64.0))))
+      (declare (dynamic-extent position))
+      (setf (raylib:camera-position light-camera) position)))
   (flet ((render-objects (&aux (eon:*scene3d-camera* (basic-scene-camera scene))) (basic-scene-draw-objects scene)))
     (eon:shadow-map-renderer-render (basic-scene-shadow scene) #'render-objects)
     (raylib:with-mode-3d (basic-scene-camera scene)
@@ -66,17 +73,12 @@
           (setf (basic-scene-shadow-intensity scene) shadow-intensity))
         (render-objects)))))
 
-(defun basic-scene-look-at (scene target)
-  (let ((camera (basic-scene-camera scene))
-        (light-camera (basic-scene-light-camera scene)))
-    (let ((tween (ute:start
-                  (ute:timeline
-                   (:parallel
-                    (:from (#.(camera-3d-parameters-form 'camera) #.(camera-3d-parameters-form 'camera)) :duration 0.2)
-                    (:from (#.(camera-3d-parameters-form 'light-camera) #.(camera-3d-parameters-form 'light-camera)) :duration 0.2))))))
-      (let ((offset (raylib:vector3-subtract target (raylib:camera-target camera))))
-        (setf (raylib:camera-target camera) target
-              (raylib:camera-position camera) (raylib:vector3-add (raylib:camera-position camera) offset)
-              (raylib:camera-target light-camera) target
-              (raylib:camera-position light-camera) (raylib:vector3-add (raylib:camera-position light-camera) offset)))
+(defun basic-scene-look-at (scene target &optional (tweenp t))
+  (let* ((camera (basic-scene-camera scene))
+         (tween (ute:tween :from (#.(camera-3d-parameters-form 'camera) #.(camera-3d-parameters-form 'camera)) :duration 0.2))
+         (offset (raylib:vector3-subtract target (raylib:camera-target camera))))
+    (setf (raylib:camera-target camera) target
+          (raylib:camera-position camera) (raylib:vector3-add (raylib:camera-position camera) offset))
+    (when tweenp
+      (ute:start tween)
       (ute::base-tween-update tween single-float-epsilon))))
