@@ -70,28 +70,18 @@
                                          :children ((eon:scene2d-label :string "$ ")
                                                     (eon:scene2d-label :string "0" :name label-money)))))))))
 
-(defstruct (game-scene-screen (:constructor %make-game-scene-screen))
-  (camera (raylib:copy-camera +camera-default+) :type raylib:camera-3d)
-  (light-camera (raylib:make-camera) :type raylib:camera-3d)
-  (shadow (eon:make-shadow-map-renderer) :type eon:shadow-map-renderer)
-  (shader (eon:load-asset 'raylib:shader (game-asset #P"scene")) :type raylib:shader)
-  (shader-uniforms (make-game-scene-screen-shader-uniforms) :type cobj:cobject)
-  (map-renderer (eon:tiled-map-renderer (tiled:load-map (game-asset #P"maps/map-1.tmx"))) :type eon:tiled-renderer)
-  (tower-base-focus-manager (eon:make-scene2d-focus-manager) :type eon:scene2d-focus-manager)
-  (ui (make-game-scene-ui) :type eon:scene2d-constructed)
-  (-money 0 :type non-negative-fixnum)
-  (towers nil :type list)
-  (enemies nil :type list)
-  (objects nil :type list)
-  (game-over-p nil :type boolean))
+(defclass basic-scene ()
+  ((camera :initarg :camera :initform (raylib:copy-camera +camera-default+) :type raylib:camera-3d :accessor basic-scene-camera)
+   (light-camera :initarg :light-camera :initform (raylib:make-camera) :type raylib:camera-3d :accessor basic-scene-light-camera)
+   (shadow :initarg :shadow :initform (eon:make-shadow-map-renderer) :type eon:shadow-map-renderer :accessor basic-scene-shadow)
+   (shader :initarg :shader :initform (eon:load-asset 'raylib:shader (game-asset #P"scene")) :type raylib:shader :accessor basic-scene-shader)
+   (shader-uniforms :initarg :shader-uniforms :initform (make-basic-scene-shader-uniforms) :type cobj:cobject :accessor basic-scene-shader-uniforms)))
 
-(defvar *game-scene-screen*)
-
-(defvar *game-scene-shader-uniforms-shadow-map*)
+(defvar *basic-scene-shader-uniforms-shadow-map*)
 
 (cobj:define-global-cobject +light-position-default+ (raylib:make-vector3 :x -1.0 :y 4.0 :z 2.0))
 
-(eon:define-shaderable-uniforms game-scene-screen
+(eon:define-shaderable-uniforms basic-scene
   ("colDiffuse" raylib:+white+ :type raylib:color)
   ("colEmission" raylib:+black+ :type raylib:color)
   ("colAmbient" (raylib:color-brightness raylib:+white+ -0.5) :type raylib:color)
@@ -100,7 +90,7 @@
   ("lightVector" (raylib:vector3-negate (raylib:vector3-normalize +light-position-default+)) :type raylib:vector3)
   ("shadowLightMatrix" (raylib:make-matrix) :type raylib:matrix)
   ("shadowIntensity" (/ 3.0) :type single-float)
-  ("shadowMap" *game-scene-shader-uniforms-shadow-map* :type raylib:texture))
+  ("shadowMap" *basic-scene-shader-uniforms-shadow-map* :type raylib:texture))
 
 (cobj:define-global-cobject +shadow-light-camera-default+
     (raylib:make-camera-3d :position +light-position-default+
@@ -108,19 +98,41 @@
                            :up (raylib:make-vector3 :x 0.0 :y 1.0 :z 0.0) :fovy 10.0
                            :projection (cffi:foreign-enum-value 'raylib:camera-projection :orthographic)))
 
-(defun make-game-scene-screen (&rest args)
+(defmethod initialize-instance :around ((scene basic-scene) &rest args)
+  (declare (ignore args))
   (let* ((light-camera (raylib:copy-camera +shadow-light-camera-default+))
-         (shadow (eon:make-shadow-map-renderer :camera light-camera :size (raylib:make-vector2 :x 1024.0 :y 512.0)))
-         (screen (let ((*game-scene-shader-uniforms-shadow-map*
-                         (eon:shadow-map-renderer-texture shadow)))
-                   (apply #'%make-game-scene-screen :shadow shadow :light-camera light-camera args))))
-    (initialize-game-scene-screen-shader-uniforms screen)
-    (setf (eon:shadow-map-renderer-matrix shadow) (game-scene-screen-shadow-light-matrix screen))
-    screen))
+         (shadow (eon:make-shadow-map-renderer :camera light-camera :size (raylib:make-vector2 :x 1024.0 :y 512.0))))
+    (let ((*basic-scene-shader-uniforms-shadow-map* (eon:shadow-map-renderer-texture shadow)))
+      (call-next-method))
+    (setf (basic-scene-shadow scene) shadow (basic-scene-light-camera scene) light-camera)
+    (initialize-basic-scene-shader-uniforms scene)
+    (setf (eon:shadow-map-renderer-matrix shadow) (basic-scene-shadow-light-matrix scene))))
 
-(defun game-scene-screen-look-at (screen target)
-  (let ((camera (game-scene-screen-camera screen))
-        (light-camera (game-scene-screen-light-camera screen)))
+(defgeneric basic-scene-draw-map (scene)
+  (:method (scene) (declare (ignore scene))))
+
+(defgeneric basic-scene-draw-objects (scene)
+  (:method (scene) (declare (ignore scene))))
+
+(defmethod eon:scene3d-draw ((scene basic-scene) position origin scale rotation tint)
+  (declare (ignore position origin scale rotation tint))
+  (flet ((render-objects (&aux (eon:*scene3d-camera* (basic-scene-camera scene))) (basic-scene-draw-objects scene)))
+    (eon:shadow-map-renderer-render (basic-scene-shadow scene) #'render-objects)
+    (raylib:with-mode-3d (basic-scene-camera scene)
+      (raylib:with-shader-mode (basic-scene-shader scene)
+        (raylib:copy-color raylib:+white+ (basic-scene-col-diffuse scene))
+        (update-basic-scene-shader-uniforms scene)
+        (basic-scene-draw-map scene)
+        (rlgl:draw-render-batch-active)
+        (let ((shadow-intensity (basic-scene-shadow-intensity scene)))
+          (setf (basic-scene-shadow-intensity scene) 0.0)
+          (update-basic-scene-shader-uniforms scene)
+          (setf (basic-scene-shadow-intensity scene) shadow-intensity))
+        (render-objects)))))
+
+(defun basic-scene-look-at (scene target)
+  (let ((camera (basic-scene-camera scene))
+        (light-camera (basic-scene-light-camera scene)))
     (let ((tween (ute:start
                   (ute:timeline
                    (:parallel
@@ -133,45 +145,51 @@
               (raylib:camera-position light-camera) (raylib:vector3-add (raylib:camera-position light-camera) offset)))
       (ute::base-tween-update tween single-float-epsilon))))
 
-(defun game-scene-screen-money (screen)
-  (game-scene-screen--money screen))
+(defstruct game-context
+  (money 0 :type non-negative-fixnum)
+  (towers nil :type list)
+  (enemies nil :type list)
+  (objects nil :type list)
+  (game-over-p nil :type boolean))
 
-(defun (setf game-scene-screen-money) (value screen)
-  (setf (eon:scene2d-label-string (game-scene-ui-label-money (game-scene-screen-ui screen))) (princ-to-string value))
-  (eon:scene2d-layout (game-scene-screen-ui screen))
-  (setf (game-scene-screen--money screen) value))
+(defclass game-scene (basic-scene)
+  ((map-renderer :initarg :map-renderer :initform (eon:tiled-map-renderer (tiled:load-map (game-asset #P"maps/map-1.tmx"))) :type eon:tiled-renderer :accessor game-scene-map-renderer)
+   (context :initarg :context :initform (make-game-context) :type game-context :accessor game-scene-context)))
+
+(defmethod basic-scene-draw-map ((scene game-scene))
+  (rlgl:push-matrix)
+  (rlgl:rotatef 90.0 1.0 0.0 0.0)
+  (rlgl:scalef (/ (coerce +tile-width+ 'single-float)) (/ (coerce +tile-height+ 'single-float)) single-float-epsilon)
+  (funcall (game-scene-map-renderer scene))
+  (rlgl:pop-matrix))
+
+(defmethod basic-scene-draw-objects ((scene game-scene))
+  (let ((context (game-scene-context scene)))
+    (unless (game-context-game-over-p context)
+      (mapc (rcurry #'game-scene-tower-try-attack (game-context-enemies context)) (game-context-towers context)))
+    (eon:scene3d-draw-simple (game-context-towers context))
+    (eon:scene3d-draw-simple (game-context-enemies context))
+    (rlgl:normal3f 0.0 1.0 0.0)
+    (eon:scene3d-draw-simple (game-context-objects context))))
+
+(defstruct game-scene-screen
+  (scene (make-instance 'game-scene) :type game-scene)
+  (ui (make-game-scene-ui) :type eon:scene2d-constructed))
 
 (defmethod eon:screen-render ((screen game-scene-screen))
-  (unless (game-scene-screen-game-over-p screen)
-    (mapc (rcurry #'game-scene-tower-try-attack (game-scene-screen-enemies screen)) (game-scene-screen-towers screen)))
   (raylib:clear-background raylib:+white+)
-  (flet ((render-objects ()
-           (let ((eon:*scene3d-camera* (game-scene-screen-camera screen)))
-             (eon:scene3d-draw-simple (game-scene-screen-towers screen))
-             (eon:scene3d-draw-simple (game-scene-screen-enemies screen))
-             (rlgl:normal3f 0.0 1.0 0.0)
-             (eon:scene3d-draw-simple (game-scene-screen-objects screen)))))
-    (eon:shadow-map-renderer-render (game-scene-screen-shadow screen) #'render-objects)
-    (raylib:with-mode-3d (game-scene-screen-camera screen)
-      (raylib:with-shader-mode (game-scene-screen-shader screen)
-        (raylib:copy-color raylib:+white+ (game-scene-screen-col-diffuse screen))
-        (update-game-scene-screen-shader-uniforms screen)
-        (rlgl:push-matrix)
-        (rlgl:rotatef 90.0 1.0 0.0 0.0)
-        (rlgl:scalef (/ (coerce +tile-width+ 'single-float)) (/ (coerce +tile-height+ 'single-float)) single-float-epsilon)
-        (funcall (game-scene-screen-map-renderer screen))
-        (rlgl:pop-matrix)
-        (rlgl:draw-render-batch-active)
-        (let ((shadow-intensity (game-scene-screen-shadow-intensity screen)))
-          (setf (game-scene-screen-shadow-intensity screen) 0.0)
-          (update-game-scene-screen-shader-uniforms screen)
-          (setf (game-scene-screen-shadow-intensity screen) shadow-intensity))
-        (render-objects))))
-  (eon:scene2d-draw-simple (game-scene-screen-ui screen)))
+  (eon:scene3d-draw-simple (game-scene-screen-scene screen))
+  (let ((ui (game-scene-screen-ui screen)))
+    (let ((old (eon:scene2d-label-string (game-scene-ui-label-money ui)))
+          (new (princ-to-string (game-context-money (game-scene-context (game-scene-screen-scene screen))))))
+      (unless (string= old new)
+        (setf (eon:scene2d-label-string (game-scene-ui-label-money ui)) new)
+        (eon:scene2d-layout (game-scene-screen-ui screen))))
+    (eon:scene2d-draw-simple ui)))
 
 (defstruct (game-scene-tower (:include eon:scene3d-container)
                              (:constructor %make-game-scene-tower))
-  (shader nil :type raylib:shader)
+  (scene nil :type basic-scene)
   (selectedp nil :type boolean)
   (type nil :type symbol)
   (level 0 :type (integer 0 3))
@@ -259,7 +277,7 @@
              (game-scene-tower-level tower))
           (when model
             (let ((model (eon:load-asset 'raylib:model model)))
-              (apply-model-shader model (game-scene-tower-shader tower))
+              (apply-model-shader model (basic-scene-shader (game-scene-tower-scene tower)))
               model)))))
 
 (defun game-scene-tower-update (tower)
@@ -274,6 +292,7 @@
 
 (defstruct (game-scene-enemy (:include eon:scene3d-container)
                              (:constructor %make-game-scene-enemy))
+  (scene nil :type basic-scene)
   (type :slime :type symbol)
   (speed 0.5 :type single-float)
   (path nil)
@@ -338,11 +357,12 @@
 (defun make-game-scene-enemy (&rest args
                               &key
                                 (type :slime)
-                                shader
+                                (scene nil)
                                 (level 1)
                                 (hp (* (getf (assoc-value *enemy-types* type) :base-hp) (/ (1+ level) 2.0)))
                                 (speed (getf (assoc-value *enemy-types* type) :speed))
-                              &allow-other-keys)
+                              &allow-other-keys
+                              &aux (shader (basic-scene-shader scene)))
   (apply #'%make-game-scene-enemy
            (destructuring-bind (&key model (model-animations model))
                (game-scene-enemy-type-asset type)
@@ -352,7 +372,7 @@
                     :scale (raylib:vector3-scale (raylib:vector3-one) (/ 3.0))
                     :animations (cobj:ccoerce (eon:load-asset 'raylib:model-animations model-animations) 'list)
                     :hp hp :total-hp hp :speed speed
-                    (remove-from-plistf args :shader :hp :total-hp :speed)))))
+                    (remove-from-plistf args :hp :total-hp :speed)))))
 
 (defun game-scene-enemy-base-bounty (enemy)
   (getf (assoc-value *enemy-types* (game-scene-enemy-type enemy)) :base-bounty))
@@ -425,12 +445,12 @@
     (await (eon:promise-tween (ute:tween :to (((eon:integer-float (raylib:color-a (game-scene-enemy-color enemy)))) (0.0))
                                          :duration 0.5)))))
 
-(defun game-scene-screen-add-enemy (screen enemy)
-  (push enemy (game-scene-screen-enemies screen)))
+(defun game-context-add-enemy (context enemy)
+  (push enemy (game-context-enemies context)))
 
-(defun game-scene-screen-remove-enemy (screen enemy)
-  (deletef (game-scene-screen-enemies screen) enemy)
-  (loop :for tower :in (game-scene-screen-towers screen)
+(defun game-context-remove-enemy (context enemy)
+  (deletef (game-context-enemies context) enemy)
+  (loop :for tower :in (game-context-towers context)
         :when (eq (game-scene-tower-target tower) enemy)
           :do (setf (game-scene-tower-target tower) nil)))
 
@@ -479,7 +499,7 @@
               :until (eq (await (eon:promise-pressed-key)) :a)
               :finally (ute:kill prompt-tween))))))
 
-(defun game-scene-enemy-updater (enemy screen)
+(defun game-scene-enemy-updater (enemy &aux (scene (game-scene-enemy-scene enemy)))
   (with-accessors ((path game-scene-enemy-path)) enemy
     (lambda ()
       (when-let ((target (first path)))
@@ -500,27 +520,28 @@
              (when (< (raylib:vector3-distance position target) single-float-epsilon)
                (pop path))))
           (function (funcall (pop path)))))
-      (cond
-        ((null path)
-         (async
-           (push :b eon::*key-queue*)
-           (game-scene-screen-look-at screen (game-scene-enemy-position enemy))
-           (setf (game-scene-screen-game-over-p screen) t)
-           (loop :for enemy :in (game-scene-screen-enemies screen)
-                 :do (setf (game-scene-enemy-speed enemy) 0.0))
-           (await (game-scene-enemy-promise-attack enemy))
-           (setf (game-scene-enemy-active-animation enemy) nil)
-           (game-scene-screen-remove-enemy screen enemy)
-           (game-over))
-         nil)
-        ((not (plusp (game-scene-enemy-hp enemy)))
-         (async
-           (await (game-scene-enemy-promise-die enemy))
-           (incf (game-scene-screen-money screen) (* (game-scene-enemy-base-bounty enemy) (floor (+ (game-scene-enemy-level enemy) 7) 8)))
-           (setf (game-scene-enemy-active-animation enemy) nil)
-           (game-scene-screen-remove-enemy screen enemy))
-         nil)
-        (t t)))))
+      (let ((context (game-scene-context scene)))
+        (cond
+          ((null path)
+           (async
+             (push :b eon::*key-queue*)
+             (basic-scene-look-at scene (game-scene-enemy-position enemy))
+             (setf (game-context-game-over-p context) t)
+             (loop :for enemy :in (game-context-enemies context)
+                   :do (setf (game-scene-enemy-speed enemy) 0.0))
+             (await (game-scene-enemy-promise-attack enemy))
+             (setf (game-scene-enemy-active-animation enemy) nil)
+             (game-context-remove-enemy context enemy)
+             (game-over))
+           nil)
+          ((not (plusp (game-scene-enemy-hp enemy)))
+           (async
+             (await (game-scene-enemy-promise-die enemy))
+             (incf (game-context-money context) (* (game-scene-enemy-base-bounty enemy) (floor (+ (game-scene-enemy-level enemy) 7) 8)))
+             (setf (game-scene-enemy-active-animation enemy) nil)
+             (game-context-remove-enemy context enemy))
+           nil)
+          (t t))))))
 
 (defmethod eon:scene3d-draw ((enemy game-scene-enemy) position origin scale rotation tint)
   (call-next-method)
@@ -733,44 +754,45 @@
     (raylib:set-target-fps 60)
     (eon:with-game-context
       (let* ((map (tiled:load-map (game-asset #P"maps/map-1.tmx")))
-             (screen (make-game-scene-screen :map-renderer (eon:tiled-map-renderer map))))
+             (scene (make-instance 'game-scene :map-renderer (eon:tiled-map-renderer map)))
+             (screen (make-game-scene-screen :scene scene))
+             (context (game-scene-context scene)))
         (eon:scene2d-layout (game-scene-screen-ui screen))
-        (with-accessors ((money game-scene-screen-money)) screen
-          (setf (game-scene-screen-money screen) 2500)
-          (loop :with group := (eon:scene2d-construct (eon:scene2d-group))
-                :for cell :in (tiled:layer-cells (find "ground" (tiled:map-layers map) :key #'tiled:layer-name :test #'string=))
-                :when (gethash "base" (tiled:properties (tiled:cell-tile cell)))
-                  :do (push (make-game-scene-tower
-                             :shader (game-scene-screen-shader screen)
-                             :position (position-2d->3d
-                                        (raylib:make-vector2
-                                         :x (+ (coerce (tiled:cell-column cell) 'single-float) 0.5)
-                                         :y (+ (coerce (tiled:cell-row cell) 'single-float) 0.5))))
-                            (game-scene-screen-towers screen))
-                  :and :collect (eon::make-scene2d-focusable
-                                 :focus-point (raylib:make-vector2
-                                               :x (coerce (tiled:cell-column cell) 'single-float)
-                                               :y (coerce (tiled:cell-row cell) 'single-float))
-                                 :content (first (game-scene-screen-towers screen)))
-                         :into focusables
-                :finally (setf (game-scene-screen-tower-base-focus-manager screen) (eon:make-scene2d-focus-manager :focusables focusables)))
-          (let ((selected-tower nil))
+        (with-accessors ((money game-context-money)) context
+          (setf money 2500)
+          (let ((focus-manager (loop :with group := (eon:scene2d-construct (eon:scene2d-group))
+                                     :for cell :in (tiled:layer-cells (find "ground" (tiled:map-layers map) :key #'tiled:layer-name :test #'string=))
+                                     :when (gethash "base" (tiled:properties (tiled:cell-tile cell)))
+                                       :do (push (make-game-scene-tower
+                                                  :scene scene
+                                                  :position (position-2d->3d
+                                                             (raylib:make-vector2
+                                                              :x (+ (coerce (tiled:cell-column cell) 'single-float) 0.5)
+                                                              :y (+ (coerce (tiled:cell-row cell) 'single-float) 0.5))))
+                                                 (game-context-towers context))
+                                       :and :collect (eon::make-scene2d-focusable
+                                                      :focus-point (raylib:make-vector2
+                                                                    :x (coerce (tiled:cell-column cell) 'single-float)
+                                                                    :y (coerce (tiled:cell-row cell) 'single-float))
+                                                      :content (first (game-context-towers context)))
+                                              :into focusables
+                                     :finally (return (eon:make-scene2d-focus-manager :focusables focusables))))
+                (selected-tower nil))
             (flet ((unselect-tower (tower)
                      (setf (game-scene-tower-selectedp tower) nil))
                    (select-tower (tower)
                      (setf (game-scene-tower-selectedp (setf selected-tower tower)) t)
-                     (game-scene-screen-look-at screen (game-scene-tower-position tower)))
+                     (basic-scene-look-at scene (game-scene-tower-position tower)))
                    (tower-screen-position (&optional (tower selected-tower))
                      (raylib:get-world-to-screen-ex
                       (game-scene-tower-position tower)
-                      (game-scene-screen-camera screen)
+                      (basic-scene-camera scene)
                       +viewport-width+ +viewport-height+)))
-              (select-tower (lastcar (game-scene-screen-towers screen)))
+              (select-tower (lastcar (game-context-towers context)))
               (async
-                (loop :with focus-manager := (game-scene-screen-tower-base-focus-manager screen)
-                      :with ui-group := (game-scene-ui-group (game-scene-screen-ui screen))
+                (loop :with ui-group := (game-scene-ui-group (game-scene-screen-ui screen))
                       :for key := (await (eon:promise-pressed-key))
-                      :until (game-scene-screen-game-over-p screen)
+                      :until (game-context-game-over-p context)
                       :do (case key
                             ((:left :right :up :down)
                              (unselect-tower (eon::scene2d-focusable-content (eon:scene2d-focus-manager-focused focus-manager)))
@@ -878,11 +900,11 @@
                                         (:sequence
                                          (:tween (eon:scene3d-billboard-tween-frames billboard sprites :duration 0.5))
                                          (:call (lambda ()
-                                                  (unless (find billboard (game-scene-screen-objects screen))
+                                                  (unless (find billboard (game-context-objects context))
                                                     (ute:kill timeline))))
                                          :repeat t))))
                       (ute:start timeline))
-                    (push billboard (game-scene-screen-objects screen)))
+                    (push billboard (game-context-objects context)))
           (async
             (loop :for wave-index :below (reduce #'max paths :key (compose #'length #'cdr))
                   :do (await (apply #'ajoin (loop :for (path . waves-desc) :in paths
@@ -892,19 +914,19 @@
                                                                (loop :for enemy-desc :in (nth wave-index waves-desc)
                                                                      :do (destructuring-bind (type &key (interval 1.0) (count 1) (level 1)) enemy-desc
                                                                            (loop :repeat count
-                                                                                 :until (game-scene-screen-game-over-p screen)
+                                                                                 :until (game-context-game-over-p context)
                                                                                  :when type
                                                                                    :do (push
                                                                                         (let ((enemy (make-game-scene-enemy
-                                                                                                      :shader (game-scene-screen-shader screen)
+                                                                                                      :scene scene
                                                                                                       :position (raylib:copy-vector3 (first path))
                                                                                                       :type type
                                                                                                       :level level
                                                                                                       :path (rest path))))
-                                                                                          (eon:add-game-loop-hook (game-scene-enemy-updater enemy screen) :after #'identity)
+                                                                                          (eon:add-game-loop-hook (game-scene-enemy-updater enemy) :after #'identity)
                                                                                           (setf (game-scene-enemy-active-animation enemy) (game-scene-enemy-find-animation enemy :idle))
                                                                                           enemy)
-                                                                                        (game-scene-screen-enemies screen))
+                                                                                        (game-context-enemies context))
                                                                                  :do (await (eon:promise-sleep interval)))))))))))))
         (setf (eon:current-screen) screen))
       (eon:do-screen-loop (eon:make-fit-viewport :width +viewport-width+ :height +viewport-height+)))))
