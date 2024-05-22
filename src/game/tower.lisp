@@ -11,34 +11,34 @@
   (projectile nil :type (or list eon:scene3d-particle-emitter)))
 
 (defparameter *tower-types*
-  '((:round-1 :cost ((1 . 1000) (2 . 2000) (3 . 4000))
-              :rate t
-              :radius ((1 . 2.0) (2 . 3.0) (3 . 4.0))
-              :power ((1 . 10) (2 . 15) (3 . 20))
-              :model ((1 . "towerRound_sampleA")
-                      (2 . "towerRound_sampleC")
-                      (3 . "towerRound_sampleE")))
-    (:round-2 :cost ((1 . 2000) (2 . 4000) (3 . 8000))
-              :rate t
-              :radius ((1 . 3.0) (2 . 4.0) (3 . 5.0))
-              :power ((1 . 15) (2 . 25) (3 . 35))
-              :model ((1 . "towerRound_sampleB")
-                      (2 . "towerRound_sampleD")
-                      (3 . "towerRound_sampleF")))
-    (:square-1 :cost ((1 . 800) (2 . 1600) (3 . 3200))
-               :rate 1.0
+  '((:square-1 :cost ((1 . 800) (2 . 1200) (3 . 1600))
+               :rate 0.75
                :radius ((1 . 2.0) (2 . 3.0) (3 . 4.0))
-               :power ((1 . 20) (2 . 30) (3 . 40))
+               :power ((1 . 15) (2 . 25) (3 . 35))
                :model ((1 . "towerSquare_sampleF")
                        (2 . "towerSquare_sampleD")
                        (3 . "towerSquare_sampleE")))
-    (:square-2 :cost ((1 . 1600) (2 . 3200) (3 . 6400))
-               :rate 1.5
+    (:square-2 :cost ((1 . 1600) (2 . 2000) (3 . 2400))
+               :rate 1.0
                :radius ((1 . 2.0) (2 . 3.0) (3 . 4.0))
-               :power ((1 . 40) (2 . 60) (3 . 80))
+               :power ((1 . 30) (2 . 50) (3 . 70))
                :model ((1 . "towerSquare_sampleC")
                        (2 . "towerSquare_sampleA")
-                       (3 . "towerSquare_sampleB")))))
+                       (3 . "towerSquare_sampleB")))
+    (:round-1 :cost ((1 . 1000) (2 . 1500) (3 . 2000))
+              :rate t
+              :radius ((1 . 2.0) (2 . 3.0) (3 . 4.0))
+              :power ((1 . 4) (2 . 8) (3 . 12))
+              :model ((1 . "towerRound_sampleA")
+                      (2 . "towerRound_sampleC")
+                      (3 . "towerRound_sampleE")))
+    (:round-2 :cost ((1 . 1500) (2 . 2000) (3 . 2500))
+              :rate t
+              :radius ((1 . 2.5) (2 . 3.5) (3 . 4.5))
+              :power ((1 . 6) (2 . 12) (3 . 16))
+              :model ((1 . "towerRound_sampleB")
+                      (2 . "towerRound_sampleD")
+                      (3 . "towerRound_sampleF")))))
 
 (defun game-scene-tower-type-level-asset (type level)
   (when-let ((model-name (assoc-value (getf (assoc-value *tower-types* type) :model) level)))

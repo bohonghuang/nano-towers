@@ -250,28 +250,27 @@
                                  (when-let ((index (await (eon:select-box-promise-index select-box))))
                                    (ecase (nth index operations)
                                      (build
-                                      (let* ((tower-select-box (let ((table (eon:scene2d-construct (eon:scene2d-table))))
-                                                                 (dolist (tower-type *tower-types*)
-                                                                   (destructuring-bind (type &key cost &allow-other-keys) tower-type
-                                                                     (eon:scene2d-table-newline table)
-                                                                     (eon:scene2d-table-add-child
-                                                                      table
-                                                                      (eon:scene2d-construct
-                                                                       (eon:scene2d-label :string (symbol-name type))))
-                                                                     (eon:scene2d-table-add-child
-                                                                      table
-                                                                      (eon:scene2d-construct
-                                                                       (eon:scene2d-margin
-                                                                        :left 16.0
-                                                                        :right 2.0
-                                                                        :top 1.0
-                                                                        :bottom 1.0
-                                                                        :child (eon:scene2d-label :string "$"))))
-                                                                     (eon:scene2d-table-add-child
-                                                                      table
-                                                                      (eon:scene2d-construct
-                                                                       (eon:scene2d-label :string (princ-to-string (assoc-value cost 1)))))))
-                                                                 (eon:table-select-box table)))
+                                      (let* ((tower-select-box
+                                               (let ((table (eon:scene2d-construct (eon:scene2d-table :orientation :horizontal))))
+                                                 (dolist (tower-type *tower-types*)
+                                                   (destructuring-bind (type &key cost model &allow-other-keys) tower-type
+                                                     (eon:scene2d-table-newline table)
+                                                     (let ((cell (eon:scene2d-table-add-child
+                                                                  table
+                                                                  (eon:scene2d-construct
+                                                                   (eon:scene2d-image
+                                                                    :drawable (eon:make-texture-region
+                                                                               :texture (eon:load-asset 'raylib:texture (game-asset (format nil "models/towers/~A.png" (assoc-value model 1))))))))))
+                                                       (setf (eon::scene2d-alignment-vertical
+                                                              (eon::scene2d-cell-alignment cell))
+                                                             :end))
+                                                     (eon:scene2d-table-add-child
+                                                      table
+                                                      (eon:scene2d-construct
+                                                       (eon:scene2d-margin
+                                                        :left 2.0 :right 2.0 :top 2.0 :bottom 2.0
+                                                        :child (eon:scene2d-label :string (format nil "$ ~D" (assoc-value cost 1))))))))
+                                                 (eon:table-select-box table)))
                                              (tower-selector (eon:scene2d-construct
                                                               (eon:scene2d-window :child tower-select-box))))
                                         (eon:scene2d-layout tower-selector)

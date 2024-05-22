@@ -52,10 +52,10 @@
 (defun make-game-scene-enemy-hp-bar (&key target)
   (%make-game-scene-enemy-hp-bar :target target :size (raylib:make-vector2 :x 96.0 :y 12.0)))
 
-(defparameter *enemy-types* '((:dragon :animation (:idle "Dragon_Flying" :death "Dragon_Death" :attack "Dragon_Attack") :base-hp 150.0 :speed 1.0 :base-bounty 1000)
-                              (:slime :animation (:idle "Slime_Walk" :death "Slime_Death" :attack "Slime_Attack") :base-hp 50.0 :speed 0.5 :base-bounty 250)
-                              (:bat :animation (:idle "Bat_Flying" :death "Bat_Death" :attack "Bat_Attack") :base-hp 25.0 :speed 1.5 :base-bounty 250)
-                              (:skeleton :animation (:idle "Skeleton_Running" :death "Skeleton_Death" :attack "Skeleton_Attack") :base-hp 50.0 :speed 0.75 :base-bounty 500)))
+(defparameter *enemy-types* '((:dragon :animation (:idle "Dragon_Flying" :death "Dragon_Death" :attack "Dragon_Attack") :base-hp 150.0 :speed 1.0 :base-bounty 800)
+                              (:slime :animation (:idle "Slime_Walk" :death "Slime_Death" :attack "Slime_Attack") :base-hp 50.0 :speed 0.5 :base-bounty 100)
+                              (:bat :animation (:idle "Bat_Flying" :death "Bat_Death" :attack "Bat_Attack") :base-hp 25.0 :speed 1.5 :base-bounty 100)
+                              (:skeleton :animation (:idle "Skeleton_Running" :death "Skeleton_Death" :attack "Skeleton_Attack") :base-hp 75.0 :speed 1.0 :base-bounty 300)))
 
 (defun game-scene-enemy-type-asset (type)
   (list :model (game-asset
@@ -69,7 +69,7 @@
                                 (type :slime)
                                 (scene nil)
                                 (level 1)
-                                (hp (* (getf (assoc-value *enemy-types* type) :base-hp) (/ (1+ level) 2.0)))
+                                (hp (coerce (/ (* (+ (getf (assoc-value *enemy-types* type) :base-hp) 0.25) level) 1.25) 'single-float))
                                 (speed (getf (assoc-value *enemy-types* type) :speed))
                               &allow-other-keys
                               &aux (shader (basic-scene-shader scene)))
@@ -200,7 +200,7 @@
           ((not (plusp (game-scene-enemy-hp enemy)))
            (async
              (await (game-scene-enemy-promise-die enemy))
-             (incf (game-context-money context) (* (game-scene-enemy-base-bounty enemy) (floor (+ (game-scene-enemy-level enemy) 7) 8)))
+             (incf (game-context-money context) (floor (* (game-scene-enemy-base-bounty enemy) (+ (game-scene-enemy-level enemy) 3)) 4))
              (setf (game-scene-enemy-active-animation enemy) nil)
              (game-context-remove-enemy context enemy))
            nil)

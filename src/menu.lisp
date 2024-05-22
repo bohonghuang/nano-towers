@@ -135,7 +135,7 @@
                                                                       :child (eon:scene2d-label
                                                                               :string string
                                                                               :style (eon:scene2d-label-style
-                                                                                      :text-style (eon:text-style :size 30.0 :spacing 8.0)
+                                                                                      :text-style (eon:text-style :size 30.0 :spacing 4.0)
                                                                                       :color raylib:+raywhite+
                                                                                       :shadow nil :outline raylib:+darkgray+))))))
                                                              (mapcar #'label '("START" "CREDIT" "EXIT")))))))))))
@@ -217,7 +217,8 @@ Game assets provided by:
                                                   :duration 0.5)))
                                       (await (eon:select-box-promise-index
                                               (main-menu-ui-select-box
-                                               (main-menu-screen-ui screen))))
+                                               (main-menu-screen-ui screen))
+                                              (or index 0)))
                                     (await (eon:promise-tween
                                             (ute:tween
                                              :to (((eon:integer-float (raylib:color-a (eon:scene2d-color (main-menu-screen-ui screen))))) (0.0))
