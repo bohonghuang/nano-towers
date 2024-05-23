@@ -131,55 +131,53 @@
                                      :repeat t))))
                   (ute:start timeline))
                 (push billboard (game-context-objects context)))
-      (flet ((promise-spawn-enemies ()
-               (async
-                 (loop :with wave-count := (reduce #'max paths :key (compose #'length #'cdr))
-                       :initially (setf (eon:scene2d-label-string (game-scene-ui-label-wave-count ui)) (princ-to-string wave-count))
-                       :for wave-index :below wave-count
-                       :do (setf (eon:scene2d-label-string (game-scene-ui-label-wave-number ui)) (princ-to-string (1+ wave-index)))
-                           (eon:scene2d-layout (game-scene-ui-cell-enemy-info ui))
-                           (await (apply #'ajoin (loop :for (path . waves-desc) :in paths
-                                                       :collect (let ((path path)
-                                                                      (waves-desc waves-desc))
-                                                                  (async
-                                                                    (loop :for enemy-desc :in (nth wave-index waves-desc)
-                                                                          :for enemy-desc-index :from 0
-                                                                          :do (destructuring-bind (type &key (interval 1.0) (count 1) (level 1)) enemy-desc
-                                                                                (loop :repeat count
-                                                                                      :until (game-context-result context)
-                                                                                      :if type
-                                                                                        :do (push
-                                                                                             (let ((enemy (make-game-scene-enemy
-                                                                                                           :scene scene
-                                                                                                           :position (raylib:copy-vector3 (first path))
-                                                                                                           :type type
-                                                                                                           :level level
-                                                                                                           :path (rest path))))
-                                                                                               (eon:add-game-loop-hook (game-scene-enemy-updater enemy) :after #'identity)
-                                                                                               (setf (game-scene-enemy-active-animation enemy) (game-scene-enemy-find-animation enemy :idle))
-                                                                                               enemy)
-                                                                                             (game-context-enemies context))
-                                                                                      :else :if (zerop enemy-desc-index)
-                                                                                              :do (let ((box (game-scene-ui-enemy-info-box ui))
-                                                                                                        (label (eon:scene2d-construct (eon:scene2d-label :string ""))))
-                                                                                                    (async
-                                                                                                      (loop :initially (eon:scene2d-box-add-child box label)
-                                                                                                            :for time :from (floor interval) :downto 1
-                                                                                                            :do (setf (eon:scene2d-label-string label) (format nil "Time Remaining for Next Wave of Enemies: ~Ds" time))
-                                                                                                                (eon:scene2d-layout (game-scene-ui-cell-enemy-info ui))
-                                                                                                                (await (eon:promise-sleep 1.0))
-                                                                                                            :finally
-                                                                                                               (eon:scene2d-box-remove-child box label)
-                                                                                                               (eon:scene2d-layout (game-scene-ui-cell-enemy-info ui)))))
-                                                                                      :do (await (eon:promise-sleep interval))))))))))
-                           (await (promise-wait-for-all-enemies-dead context)))
-                 (unless (game-context-result context)
-                   (setf (game-context-result context) :success)
-                   (await (promise-cancel-all-input))))))
+      (labels ((promise-spawn-enemy-wave (wave path)
+                 (async
+                   (loop :for enemy-desc :in wave
+                         :for enemy-desc-index :from 0
+                         :do (destructuring-bind (type &key (interval 1.0) (count 1) (level 1)) enemy-desc
+                               (loop :repeat count
+                                     :until (game-context-result context)
+                                     :if type
+                                       :do (push
+                                            (let ((enemy (make-game-scene-enemy
+                                                          :scene scene
+                                                          :position (raylib:copy-vector3 (first path))
+                                                          :type type
+                                                          :level level
+                                                          :path (rest path))))
+                                              (eon:add-game-loop-hook (game-scene-enemy-updater enemy) :after #'identity)
+                                              (setf (game-scene-enemy-active-animation enemy) (game-scene-enemy-find-animation enemy :idle))
+                                              enemy)
+                                            (game-context-enemies context))
+                                     :else :if (zerop enemy-desc-index)
+                                             :do (let ((box (game-scene-ui-enemy-info-box ui))
+                                                       (label (eon:scene2d-construct (eon:scene2d-label :string ""))))
+                                                   (async
+                                                     (loop :initially (eon:scene2d-box-add-child box label)
+                                                           :for time :from (floor interval) :downto 1
+                                                           :do (setf (eon:scene2d-label-string label) (format nil "Time Remaining for Next Wave of Enemies: ~Ds" time))
+                                                               (eon:scene2d-layout (game-scene-ui-cell-enemy-info ui))
+                                                               (await (eon:promise-sleep 1.0))
+                                                           :finally
+                                                              (eon:scene2d-box-remove-child box label)
+                                                              (eon:scene2d-layout (game-scene-ui-cell-enemy-info ui)))))
+                                     :do (await (eon:promise-sleep interval)))))))
+               (promise-spawn-enemies ()
+                 (async
+                   (loop :with wave-count := (reduce #'max paths :key (compose #'length #'cdr))
+                         :initially (setf (eon:scene2d-label-string (game-scene-ui-label-wave-count ui)) (princ-to-string wave-count))
+                         :for wave-index :below wave-count
+                         :do (setf (eon:scene2d-label-string (game-scene-ui-label-wave-number ui)) (princ-to-string (1+ wave-index)))
+                             (eon:scene2d-layout (game-scene-ui-cell-enemy-info ui))
+                             (await (apply #'ajoin (loop :for (path . waves-desc) :in paths :collect (promise-spawn-enemy-wave (nth wave-index waves-desc) path))))
+                             (await (promise-wait-for-all-enemies-dead context)))
+                   (unless (game-context-result context)
+                     (setf (game-context-result context) :success)
+                     (await (promise-cancel-all-input))))))
         (with-accessors ((money game-context-money)) context
           (setf money (gethash "money" (tiled:properties map)))
-          (let ((focus-manager (loop :with group := (eon:scene2d-construct (eon:scene2d-group))
-                                     :for cell :in (tiled:layer-cells (find "ground" (tiled:map-layers map) :key #'tiled:layer-name :test #'string=))
+          (let ((focus-manager (loop :for cell :in (tiled:layer-cells (find "ground" (tiled:map-layers map) :key #'tiled:layer-name :test #'string=))
                                      :when (gethash "base" (tiled:properties (tiled:cell-tile cell)))
                                        :do (push (make-game-scene-tower
                                                   :scene scene
@@ -254,6 +252,7 @@
                                                (let ((table (eon:scene2d-construct (eon:scene2d-table :orientation :horizontal))))
                                                  (dolist (tower-type *tower-types*)
                                                    (destructuring-bind (type &key cost model &allow-other-keys) tower-type
+                                                     (declare (ignore type))
                                                      (eon:scene2d-table-newline table)
                                                      (let ((cell (eon:scene2d-table-add-child
                                                                   table
