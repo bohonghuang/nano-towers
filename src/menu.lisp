@@ -104,41 +104,44 @@
 (define-constant +game-title+ "Nano tOwErs" :test #'string=)
 
 (eon:define-scene2d-constructed main-menu-ui
-    (eon:scene2d-cell
-     :size (#.(float +viewport-width+) #.(float +viewport-height+))
-     :child (eon:scene2d-box
-             :children ((eon:scene2d-margin
-                         :top 80.0
-                         :bottom 40.0
-                         :child (eon:scene2d-label
-                                 :string +game-title+
-                                 :style (eon:scene2d-label-style
-                                         :text-style (eon:text-style :size 60.0 :spacing 8.0)
-                                         :color raylib:+white+
-                                         :shadow nil :outline raylib:+darkgray+)))
-                        (eon:scene2d-margin
-                         :top 80.0
-                         :bottom 80.0
-                         :child (eon:scene2d-window
-                                 :style (eon:scene2d-window-style
-                                         :background (eon:scene2d-rectangle :color (raylib:fade raylib:+black+ 0.5)))
-                                 :child (eon:scene2d-margin
-                                         :top 2.0 :bottom 2.0 :left 2.0 :right 2.0
-                                         :child (eon:select-box
-                                                 :name select-box
-                                                 :layout (1 T)
-                                                 :style (eon:select-box-style :entry-type 'select-box-transparency-entry)
-                                                 :children (flet ((label (string)
-                                                                    (eon:scene2d-construct
-                                                                     (eon:scene2d-max-cell
-                                                                      :size (256.0 40.0)
-                                                                      :child (eon:scene2d-label
-                                                                              :string string
-                                                                              :style (eon:scene2d-label-style
-                                                                                      :text-style (eon:text-style :size 30.0 :spacing 4.0)
-                                                                                      :color raylib:+raywhite+
-                                                                                      :shadow nil :outline raylib:+darkgray+))))))
-                                                             (mapcar #'label '("START" "CREDIT" "EXIT")))))))))))
+    (eon:scene2d-group
+     :name group
+     :children ((eon:scene2d-cell
+                 :name cell
+                 :size (#.(float +viewport-width+) #.(float +viewport-height+))
+                 :child (eon:scene2d-box
+                         :children ((eon:scene2d-margin
+                                     :top 80.0
+                                     :bottom 40.0
+                                     :child (eon:scene2d-label
+                                             :string +game-title+
+                                             :style (eon:scene2d-label-style
+                                                     :text-style (eon:text-style :size 60.0 :spacing 8.0)
+                                                     :color raylib:+white+
+                                                     :shadow nil :outline raylib:+darkgray+)))
+                                    (eon:scene2d-margin
+                                     :top 80.0
+                                     :bottom 80.0
+                                     :child (eon:scene2d-window
+                                             :style (eon:scene2d-window-style
+                                                     :background (eon:scene2d-rectangle :color (raylib:fade raylib:+black+ 0.5)))
+                                             :child (eon:scene2d-margin
+                                                     :top 2.0 :bottom 2.0 :left 2.0 :right 2.0
+                                                     :child (eon:select-box
+                                                             :name select-box
+                                                             :layout (1 T)
+                                                             :style (eon:select-box-style :entry-type 'select-box-transparency-entry)
+                                                             :children (flet ((label (string)
+                                                                                (eon:scene2d-construct
+                                                                                 (eon:scene2d-max-cell
+                                                                                  :size (256.0 40.0)
+                                                                                  :child (eon:scene2d-label
+                                                                                          :string string
+                                                                                          :style (eon:scene2d-label-style
+                                                                                                  :text-style (eon:text-style :size 30.0 :spacing 4.0)
+                                                                                                  :color raylib:+raywhite+
+                                                                                                  :shadow nil :outline raylib:+darkgray+))))))
+                                                                         (mapcar #'label '("START" "CREDIT" "EXIT")))))))))))))
 
 (eon:define-scene2d-constructed credit-page
     (eon:scene2d-max-cell
@@ -191,7 +194,7 @@ Game assets provided by:
       (eon:with-game-context
         (let ((screen (make-main-menu-screen)))
           (eon:scene2d-layout (main-menu-screen-ui screen))
-          (setf (raylib:color-a (eon:scene2d-color (main-menu-screen-ui screen))) 0)
+          (setf (raylib:color-a (eon:scene2d-color (main-menu-ui-cell (main-menu-screen-ui screen)))) 0)
           (eon:scene2d-layout (main-menu-screen-credit screen))
           (raylib:copy-vector2
            (raylib:make-vector2 :x 0.0 :y #.(float +viewport-height+))
@@ -211,24 +214,33 @@ Game assets provided by:
                                                    (:to (((raylib:vector2-y (eon:scene2d-position credit)))
                                                          (credit-src-y)))))))))))
             (async
-              (loop :for index := (prog2 (await (eon:promise-tween
-                                                 (ute:tween
-                                                  :to (((eon:integer-float (raylib:color-a (eon:scene2d-color (main-menu-screen-ui screen))))) (255.0))
-                                                  :duration 0.5)))
-                                      (await (eon:select-box-promise-index
-                                              (main-menu-ui-select-box
-                                               (main-menu-screen-ui screen))
-                                              (or index 0)))
-                                    (await (eon:promise-tween
-                                            (ute:tween
-                                             :to (((eon:integer-float (raylib:color-a (eon:scene2d-color (main-menu-screen-ui screen))))) (0.0))
-                                             :duration 0.5))))
+              (loop :with max-level-reached := 1
+                    :for index := (let ((color (eon:scene2d-color (main-menu-ui-cell (main-menu-screen-ui screen)))))
+                                    (prog2 (await (eon:promise-tween
+                                                   (ute:tween
+                                                    :to (((eon:integer-float (raylib:color-a color))) (255.0))
+                                                    :duration 0.5)))
+                                        (await (eon:select-box-promise-index
+                                                (main-menu-ui-select-box
+                                                 (main-menu-screen-ui screen))
+                                                (or index 0)))
+                                      (await (eon:promise-tween
+                                              (ute:tween
+                                               :to (((eon:integer-float (raylib:color-a color))) (0.0))
+                                               :duration 0.5)))))
                     :until (eql index 2)
                     :do (case index
                           (0 (when (save-screen-excursion
-                                     (loop :for i :from 1 :to 2
+                                     (loop :for i :from (if (and (> max-level-reached 1)
+                                                                 (await (promise-yes-or-no-p
+                                                                         "CONFIRMATION" "Would you like to continue from the highest level you reached last time?"
+                                                                         (main-menu-ui-group (main-menu-screen-ui screen)))))
+                                                            max-level-reached 1)
+                                             :to 2
+                                           :do (maxf max-level-reached i)
                                            :always (await (promise-play-level i))))
-                               (await (promise-display-credit))))
+                               (await (promise-display-credit))
+                               (setf max-level-reached 1)))
                           (1 (await (promise-display-credit)))))
               (throw 'exit t))))
         (eon:do-screen-loop (eon:make-fit-viewport :width +viewport-width+ :height +viewport-height+))))))

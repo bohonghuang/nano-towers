@@ -18,6 +18,7 @@
                 :components ((:file "package")
                              (:file "constants")
                              (:file "utils")
+                             (:file "ui")
                              (:file "scene")
                              (:module "game"
                               :serial t
