@@ -1,0 +1,14 @@
+#+TITLE: Nano tOwErs
+A simple 3D tower defense game written in Common Lisp with the [[https://github.com/bohonghuang/eon][EON]] framework based on [[https://www.raylib.com][Raylib]].
+
+[[file:cover.png]]
+* Build
+Before starting, please ensure that you have correctly installed the
+[[https://github.com/bohonghuang/eon][EON]] game framework, then clone the project to a location that can be
+found by Quicklisp. Next, run the game in the REPL with the following
+command:
+
+#+BEGIN_SRC lisp
+  (ql:quickload :nano-towers)
+  (nano-towers:main)
+#+END_SRC
