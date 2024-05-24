@@ -99,6 +99,9 @@
 
 (defmethod eon:scene3d-draw ((tower game-scene-tower) position origin scale rotation tint)
   (when (game-scene-tower-selectedp tower)
+    (when-let ((radius (game-scene-tower-attack-radius tower)))
+      (rlgl:normal3f 0.0 1.0 0.0)
+      (raylib:draw-cylinder position radius radius 0.1 30 (raylib:fade raylib:+maroon+ (/ 3.0))))
     (raylib:draw-cube position 1.0 0.25 1.0 (raylib:fade raylib:+white+ 0.5)))
   (call-next-method)
   (eon:scene3d-draw-simple (game-scene-tower-projectile tower)))
