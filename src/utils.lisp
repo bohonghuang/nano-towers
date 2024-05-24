@@ -1,7 +1,10 @@
 (in-package #:nano-towers)
 
 (defun game-asset (pathname)
-  (merge-pathnames pathname #.(merge-pathnames #P"assets/" (asdf:component-pathname (asdf:find-system '#:nano-towers)))))
+  (merge-pathnames
+   pathname
+   #+nano-towers-release (merge-pathnames #P"assets/" (uiop:getcwd))
+   #-nano-towers-release #.(merge-pathnames #P"assets/" (asdf:component-pathname (asdf:find-system '#:nano-towers)))))
 
 (defmethod eon:scene3d-draw :around ((emitter eon:scene3d-particle-emitter) position origin scale rotation tint)
   (rlgl:disable-depth-mask)

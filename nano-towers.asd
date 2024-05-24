@@ -11,7 +11,9 @@
   :bug-tracker "https://github.com/bohonghuang/spring-lisp-game-jam-2024/issues"
   :source-control (:git "https://github.com/bohonghuang/spring-lisp-game-jam-2024.git")
   :entry-point "nano-towers:main"
-  :build-operation program-op
+  :defsystem-depends-on (:deploy)
+  :build-operation "deploy-op"
+  :build-pathname "nano-towers"
   :depends-on (#:alexandria #:eon)
   :components ((:module "src"
                 :serial t
