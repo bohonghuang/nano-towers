@@ -48,9 +48,7 @@
                                           (progn
                                             (eon:particle-3d-update-motion particle-object)
                                             (maxf (-> particle eon::position-velocity raylib:y) -1.0)
-                                            (when (minusp (-> particle eon::position raylib:y))
-                                              (setf (-> particle eon::position raylib:y) 0.0
-                                                    (-> particle eon::position-velocity raylib:y) (* (-> particle eon::position-velocity raylib:y) -4.0)))))))))
+                                            (particle-3d-bounce particle-object 4.0)))))))
                      :renderer (eon:particle-3d-cube-renderer 0.05 (eon:particle-3d-interpolate-color-over-age raylib:+red+ (raylib:fade raylib:+red+ 0.0) #'ute:circ-in))))
       (let ((camera (basic-scene-camera scene)))
         (setf (raylib:camera-target camera) (raylib:vector3-add origin (raylib:make-vector3 :x 0.0 :y 0.4 :z 0.0))

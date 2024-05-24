@@ -103,6 +103,63 @@
            (succeed)))
      :after #'not)))
 
+(defun make-tower-upgrade-emitter (tower)
+  (let ((emitter (eon:make-scene3d-particle-emitter
+                  :rate 0.0
+                  :capacity 512
+                  :position (raylib:copy-vector3 (game-scene-tower-position tower))
+                  :updater (lambda (position)
+                             (let ((origin (raylib:make-vector3))
+                                   (bounding-box (eon:scene3d-bound (game-scene-tower-model tower)))
+                                   (bounding-box-scale (raylib:vector3-scale (raylib:vector3-one) 1.25))
+                                   (acceleration (raylib:make-vector3)))
+                               (lambda (particle)
+                                 (if (zerop (eon:particle-3d-age particle))
+                                     (progn
+                                       (eon:particle-3d-initialize-default
+                                        particle (bounding-box-sample bounding-box (raylib:copy-vector3 position origin) bounding-box-scale))
+                                       (setf (eon:particle-3d-lifetime particle) 1.0))
+                                     (progn
+                                       (setf (raylib:vector3-x acceleration) (- 5.0 (random 10.0))
+                                             (raylib:vector3-y acceleration) (if (< (eon:particle-3d-age particle) 0.25)
+                                                                                 (- 5.0 (random 10.0))
+                                                                                 5.0)
+                                             (raylib:vector3-z acceleration) (- 5.0 (random 10.0))
+                                             (eon:particle-3d-acceleration particle) acceleration)
+                                       (eon:particle-3d-update-motion particle))))))
+                  :renderer (eon:particle-3d-cube-renderer 0.15 (eon:particle-3d-interpolate-color-over-age (raylib:fade raylib:+white+ 0.0) raylib:+white+ #'eon::sine-yoyo-2)))))
+    (eon:scene3d-particle-emitter-burst emitter 512)
+    emitter))
+
+(defun make-tower-demolish-emitter (tower)
+  (let ((emitter (eon:make-scene3d-particle-emitter
+                  :rate 0.0
+                  :capacity 512
+                  :position (raylib:copy-vector3 (game-scene-tower-position tower))
+                  :updater (lambda (position)
+                             (let ((origin (raylib:make-vector3))
+                                   (bounding-box (eon:scene3d-bound (game-scene-tower-model tower)))
+                                   (bounding-box-scale (raylib:vector3-scale (raylib:vector3-one) 1.25))
+                                   (acceleration (raylib:make-vector3)))
+                               (lambda (particle)
+                                 (if (zerop (eon:particle-3d-age particle))
+                                     (progn
+                                       (eon:particle-3d-initialize-default
+                                        particle (bounding-box-sample bounding-box (raylib:copy-vector3 position origin) bounding-box-scale))
+                                       (setf (eon:particle-3d-lifetime particle) 1.5))
+                                     (progn
+                                       (setf (raylib:vector3-x acceleration) (- 5.0 (random 10.0))
+                                             (raylib:vector3-y acceleration) (if (< (eon:particle-3d-age particle) 0.25)
+                                                                                 (- 5.0 (random 10.0))
+                                                                                 -10.0)
+                                             (raylib:vector3-z acceleration) (- 5.0 (random 10.0))
+                                             (eon:particle-3d-acceleration particle) acceleration)
+                                       (eon:particle-3d-update-motion particle)
+                                       (particle-3d-bounce particle))))))
+                  :renderer (eon:particle-3d-cube-renderer 0.15 (eon:particle-3d-interpolate-color-over-age (raylib:fade raylib:+white+ 0.0) raylib:+white+ #'eon::sine-yoyo-2)))))
+    (eon:scene3d-particle-emitter-burst emitter 512)
+    emitter))
+
 (defun promise-play-level (&optional (level 1))
   #+sbcl (declare (sb-ext:muffle-conditions style-warning sb-ext:compiler-note))
   (let* ((map (tiled:load-map (game-asset (format nil "maps/level-~D.tmx" level))))
@@ -285,7 +342,16 @@
                                                     (decf money cost)
                                                     (setf (game-scene-tower-type selected-tower) type
                                                           (game-scene-tower-level selected-tower) 1)
-                                                    (game-scene-tower-update selected-tower))
+                                                    (game-scene-tower-update selected-tower)
+                                                    (let ((position (game-scene-tower-position selected-tower)))
+                                                      (setf (game-scene-tower-type selected-tower) nil)
+                                                      (await
+                                                       (eon:promise-tween
+                                                        (ute:tween
+                                                         :from (((raylib:vector3-y position)) (10.0))
+                                                         :duration 1.0
+                                                         :ease #'ute:bounce-out)))
+                                                      (setf (game-scene-tower-type selected-tower) type)))
                                                   (await (promise-confirm-message "WARNING" "You don't have enough money to build this tower!" ui-group))))))))
                                      (upgrade
                                       (let ((cost (assoc-value
@@ -300,7 +366,12 @@
                                               (progn
                                                 (decf money cost)
                                                 (incf (game-scene-tower-level selected-tower))
-                                                (game-scene-tower-update selected-tower))
+                                                (let ((emitter (make-tower-upgrade-emitter selected-tower)))
+                                                  (push emitter (game-context-objects context))
+                                                  (await (eon:promise-sleep 0.5))
+                                                  (game-scene-tower-update selected-tower)
+                                                  (await (eon:promise-sleep 0.5))
+                                                  (deletef (game-context-objects context) emitter)))
                                               (await (promise-confirm-message "WARNING" "You don't have enough money to upgrade this tower!" ui-group))))))
                                      (demolish
                                       (let ((refund (let* ((level-cost (getf (assoc-value *tower-types* (game-scene-tower-type selected-tower)) :cost))
@@ -314,7 +385,12 @@
                                           (incf money refund)
                                           (setf (game-scene-tower-level selected-tower) 0
                                                 (game-scene-tower-type selected-tower) nil)
-                                          (game-scene-tower-update selected-tower))))
+                                          (let ((emitter (make-tower-demolish-emitter selected-tower)))
+                                            (push emitter (game-context-objects context))
+                                            (await (eon:promise-sleep 0.5))
+                                            (game-scene-tower-update selected-tower)
+                                            (await (eon:promise-sleep 1.0))
+                                            (deletef (game-context-objects context) emitter)))))
                                      (cancel))))))))
                 (when (eq (game-context-result context) :failure)
                   (await (eon:promise-sleep 2.0))

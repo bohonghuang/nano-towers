@@ -40,3 +40,18 @@
            (prog1 (setf eon::*key-queue* nil) (succeed))
            (push :b eon::*key-queue*)))
      :after #'identity)))
+
+(defun bounding-box-sample (bounding-box &optional (origin (raylib:vector3-zero)) (scale (raylib:vector3-one)))
+  (let ((min (raylib:bounding-box-min bounding-box))
+        (max (raylib:bounding-box-max bounding-box)))
+    (incf (raylib:vector3-x origin) (* (raylib:vector3-x scale) (+ (raylib:vector3-x min) (random (- (raylib:vector3-x max) (raylib:vector3-x min))))))
+    (incf (raylib:vector3-y origin) (* (raylib:vector3-y scale) (+ (raylib:vector3-y min) (random (- (raylib:vector3-y max) (raylib:vector3-y min))))))
+    (incf (raylib:vector3-z origin) (* (raylib:vector3-z scale) (+ (raylib:vector3-z min) (random (- (raylib:vector3-z max) (raylib:vector3-z min))))))
+    origin))
+
+(declaim (ftype (function (eon:particle-3d &optional single-float)) particle-3d-bounce))
+(defun particle-3d-bounce (particle &optional (coefficient 1.0))
+  (clet ((particle (cthe (:pointer (:struct eon:particle-3d)) (& particle))))
+    (when (minusp (-> particle eon::position raylib:y))
+      (setf (-> particle eon::position raylib:y) 0.0
+            (-> particle eon::position-velocity raylib:y) (* (-> particle eon::position-velocity raylib:y) (- coefficient))))))
