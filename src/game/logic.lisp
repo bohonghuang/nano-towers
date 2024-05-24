@@ -119,7 +119,8 @@
          (ui (game-scene-screen-ui screen))
          (context (game-scene-context scene)))
     (eon:scene2d-layout (game-scene-screen-ui screen))
-    (let ((paths (game-scene-map-enemy-paths map)))
+    (let ((paths (game-scene-map-enemy-paths map))
+          (wait-cancelers nil))
       (loop :with sprites := (eon:array-vector (eon:split-texture (eon:load-asset 'raylib:texture (game-asset #P"flag.png")) '(1 5)))
             :for (path . nil) :in paths
             :for billboard := (eon:make-scene3d-billboard
@@ -139,7 +140,20 @@
                                      :repeat t))))
                   (ute:start timeline))
                 (push billboard (game-context-objects context)))
-      (labels ((promise-spawn-enemy-wave (wave path)
+      (labels ((promise-display-countdown (interval wait-canceler)
+                 (let ((box (game-scene-ui-enemy-info-box ui))
+                       (label (eon:scene2d-construct (eon:scene2d-label :string "" :style (default-label-style)))))
+                   (async
+                     (loop :initially (eon:scene2d-box-add-child box label)
+                           :for time :from (floor interval) :downto 1
+                           :do (setf (eon:scene2d-label-string label) (format nil "Time Remaining for Next Wave of Enemies: ~Ds" time))
+                               (eon:scene2d-layout (game-scene-ui-cell-enemy-info ui))
+                               (await (eon:promise-sleep 1.0))
+                           :while (member wait-canceler wait-cancelers)
+                           :finally
+                              (eon:scene2d-box-remove-child box label)
+                              (eon:scene2d-layout (game-scene-ui-cell-enemy-info ui))))))
+               (promise-spawn-enemy-wave (wave path)
                  (async
                    (loop :for enemy-desc :in wave
                          :for enemy-desc-index :from 0
@@ -158,19 +172,15 @@
                                               (setf (game-scene-enemy-active-animation enemy) (game-scene-enemy-find-animation enemy :idle))
                                               enemy)
                                             (game-context-enemies context))
-                                     :else :if (zerop enemy-desc-index)
-                                             :do (let ((box (game-scene-ui-enemy-info-box ui))
-                                                       (label (eon:scene2d-construct (eon:scene2d-label :string "" :style (default-label-style)))))
-                                                   (async
-                                                     (loop :initially (eon:scene2d-box-add-child box label)
-                                                           :for time :from (floor interval) :downto 1
-                                                           :do (setf (eon:scene2d-label-string label) (format nil "Time Remaining for Next Wave of Enemies: ~Ds" time))
-                                                               (eon:scene2d-layout (game-scene-ui-cell-enemy-info ui))
-                                                               (await (eon:promise-sleep 1.0))
-                                                           :finally
-                                                              (eon:scene2d-box-remove-child box label)
-                                                              (eon:scene2d-layout (game-scene-ui-cell-enemy-info ui)))))
-                                     :do (await (eon:promise-sleep interval)))))))
+                                     :do (if (and (null type) (zerop enemy-desc-index))
+                                             (let ((promise (promise:make)))
+                                               (letrec ((wait-canceler (lambda () (promise:succeed promise) (deletef wait-cancelers wait-canceler))))
+                                                 (promise-display-countdown interval wait-canceler)
+                                                 (push wait-canceler wait-cancelers)
+                                                 (await (aselect (eon:promise-sleep interval) promise))
+                                                 (when (member wait-canceler wait-cancelers)
+                                                   (funcall wait-canceler))))
+                                             (await (eon:promise-sleep interval))))))))
                (promise-spawn-enemies ()
                  (async
                    (loop :with wave-count := (reduce #'max paths :key (compose #'length #'cdr))
@@ -350,9 +360,13 @@
                                             (game-scene-tower-update selected-tower)
                                             (await (eon:promise-sleep 1.0))
                                             (deletef (game-context-objects context) emitter)))))
-                                     (cancel))))))))
+                                     (cancel))))))
+                            (:b (when wait-cancelers
+                                  (when (await (promise-yes-or-no-p "CONFIRMATION" "Do you want the next wave of enemies to come now?" ui-group))
+                                    (mapc #'funcall wait-cancelers))))))
                 (when (eq (game-context-result context) :failure)
                   (await (eon:promise-sleep 2.0))
+                  (await (promise-cancel-all-input))
                   (await (promise-confirm-game-over)))
                 (loop :for enemy :in (game-context-enemies context)
                       :do (setf (game-scene-enemy-active-animation enemy) nil))

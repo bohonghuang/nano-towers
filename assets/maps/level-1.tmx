@@ -20,21 +20,21 @@
  <objectgroup id="3" name="enemy">
   <object id="23" name="path" x="1000" y="3400">
    <properties>
-    <property name="waves">(((nil :interval 15.0)
+    <property name="waves">(((nil :interval 60.0)
   (:slime :level 1 :count 3 :interval 1.0)
   (nil :interval 1.0)
   (:bat :level 1 :count 3 :interval 0.5))
- ((nil :interval 10.0)
+ ((nil :interval 30.0)
   (:slime :level 2 :count 5 :interval 1.0)
   (:bat :level 2 :count 5 :interval 0.5))
- ((nil :interval 10.0)
+ ((nil :interval 30.0)
   (:slime :level 3 :count 7 :interval 1.0)
   (:bat :level 3 :count 7 :interval 0.5))
- ((nil :interval 10.0)
+ ((nil :interval 30.0)
   (:slime :level 4 :count 7 :interval 1.0)
   (:bat :level 4 :count 7 :interval 0.5)
   (:skeleton :level 4 :count 3 :interval 1.0))
- ((nil :interval 10.0)
+ ((nil :interval 30.0)
   (:slime :level 5 :count 7 :interval 1.0)
   (:bat :level 5 :count 7 :interval 0.5)
   (:dragon :level 5 :count 3 :interval 1.0)))</property>
