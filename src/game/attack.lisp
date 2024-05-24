@@ -8,6 +8,7 @@
 
 (defun game-scene-tower-attack (tower &optional enemies)
   (let ((main-enemy (game-scene-tower-target tower))
+        (attack-rate (game-scene-tower-attack-rate tower))
         (damage (* (game-scene-tower-attack-power tower)
                    (etypecase (game-scene-tower-attack-rate tower)
                      ((eql t) (eon:game-loop-delta-time))
@@ -15,7 +16,7 @@
     (flet ((damage (target)
              (eon:scene3d-particle-emitter-burst
               (game-scene-enemy-blood-emitter target)
-              (etypecase (game-scene-tower-attack-rate tower)
+              (etypecase attack-rate
                 ((eql t) 1)
                 (single-float 60)))
              (with-accessors ((hp game-scene-enemy-hp)) target
