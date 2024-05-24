@@ -1,4 +1,4 @@
-(in-package #:spring-lisp-game-jam-2024)
+(in-package #:nano-towers)
 
 (defstruct game-context
   (money 0 :type non-negative-fixnum)

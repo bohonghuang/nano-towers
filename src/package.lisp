@@ -1,5 +1,5 @@
-(defpackage spring-lisp-game-jam-2024
+(defpackage nano-towers
   (:use #:cl #:cffi #:cffi-ops #:alexandria #:promise-async-await)
   (:export #:main))
 
-(in-package #:spring-lisp-game-jam-2024)
+(in-package #:nano-towers)

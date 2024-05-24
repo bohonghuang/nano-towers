@@ -1,4 +1,4 @@
-(in-package #:spring-lisp-game-jam-2024)
+(in-package #:nano-towers)
 
 (cobj:define-global-cobject +camera-default+ (raylib:make-camera-3d
                                               :position (raylib:make-vector3 :x 0.0 :y 10.0 :z 5.0)

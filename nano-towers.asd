@@ -2,7 +2,7 @@
 (defmethod asdf:perform ((o asdf:image-op) (c asdf:system))
   (uiop:dump-image (asdf:output-file o c) :executable t :compression t))
 
-(defsystem spring-lisp-game-jam-2024
+(defsystem nano-towers
   :version "1.0.0"
   :author "Bohong Huang <1281299809@qq.com>"
   :maintainer "Bohong Huang <1281299809@qq.com>"
@@ -10,7 +10,7 @@
   :homepage "https://github.com/bohonghuang/spring-lisp-game-jam-2024"
   :bug-tracker "https://github.com/bohonghuang/spring-lisp-game-jam-2024/issues"
   :source-control (:git "https://github.com/bohonghuang/spring-lisp-game-jam-2024.git")
-  :entry-point "spring-lisp-game-jam-2024:main"
+  :entry-point "nano-towers:main"
   :build-operation program-op
   :depends-on (#:alexandria #:eon)
   :components ((:module "src"

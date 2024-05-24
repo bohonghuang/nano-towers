@@ -1,4 +1,4 @@
-(in-package #:spring-lisp-game-jam-2024)
+(in-package #:nano-towers)
 
 (defun game-scene-tower-target-in-range-p (tower &optional (enemy (game-scene-tower-target tower)))
   (<= (raylib:vector3-distance

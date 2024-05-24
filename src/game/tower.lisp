@@ -1,4 +1,4 @@
-(in-package #:spring-lisp-game-jam-2024)
+(in-package #:nano-towers)
 
 (defstruct (game-scene-tower (:include eon:scene3d-container)
                              (:constructor %make-game-scene-tower))

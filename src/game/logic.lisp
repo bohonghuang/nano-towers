@@ -1,4 +1,4 @@
-(in-package #:spring-lisp-game-jam-2024)
+(in-package #:nano-towers)
 
 (defun promise-confirm-game-over ()
   (let* ((screenshot-1 (eon:take-screenshot))

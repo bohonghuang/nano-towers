@@ -1,4 +1,4 @@
-(in-package #:spring-lisp-game-jam-2024)
+(in-package #:nano-towers)
 
 (defconstant +viewport-width+ 640)
 (defconstant +viewport-height+ 384)

@@ -1,4 +1,4 @@
-(in-package #:spring-lisp-game-jam-2024)
+(in-package #:nano-towers)
 
 (defclass main-menu-scene (basic-scene)
   ((map-renderer :type eon:tiled-renderer)
@@ -103,6 +103,8 @@
                                            (select-box-transparency-entry-alpha entry))))
     (call-next-method entry position origin scale rotation color)))
 
+(define-constant +game-title+ "Nano tOwErs" :test #'string=)
+
 (eon:define-scene2d-constructed main-menu-ui
     (eon:scene2d-cell
      :size (#.(float +viewport-width+) #.(float +viewport-height+))
@@ -111,7 +113,7 @@
                          :top 80.0
                          :bottom 40.0
                          :child (eon:scene2d-label
-                                 :string "Lisp Game Jam 2024"
+                                 :string +game-title+
                                  :style (eon:scene2d-label-style
                                          :text-style (eon:text-style :size 60.0 :spacing 8.0)
                                          :color raylib:+white+
@@ -144,7 +146,7 @@
     (eon:scene2d-max-cell
      :size (#.(float +viewport-width+) 0.0)
      :child (eon:scene2d-box
-             :children ((eon:scene2d-label :string "Presented by bohonghuang, for the submission of Lisp Game Jam 2024.
+             :children ((eon:scene2d-label :string "Presented by bohonghuang, for the submission of Spring Lisp Game Jam 2024.
 
 Powered by the EON framework based on Raylib.
 
@@ -186,7 +188,7 @@ Game assets provided by:
 (defun main ()
   (catch 'exit
     (raylib:set-config-flags (cffi:foreign-bitfield-value 'raylib:config-flags '(:window-resizable :vsync-hint)))
-    (raylib:with-window ("Spring Lisp Game Jam 2024" (+viewport-width+ +viewport-height+))
+    (raylib:with-window (+game-title+ (+viewport-width+ +viewport-height+))
       (raylib:set-target-fps 60)
       (eon:with-game-context
         (let ((screen (make-main-menu-screen)))
