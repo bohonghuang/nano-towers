@@ -7,9 +7,9 @@
   :author "Bohong Huang <1281299809@qq.com>"
   :maintainer "Bohong Huang <1281299809@qq.com>"
   :license "Apache-2.0"
-  :homepage "https://github.com/bohonghuang/spring-lisp-game-jam-2024"
-  :bug-tracker "https://github.com/bohonghuang/spring-lisp-game-jam-2024/issues"
-  :source-control (:git "https://github.com/bohonghuang/spring-lisp-game-jam-2024.git")
+  :homepage "https://github.com/bohonghuang/nano-towers"
+  :bug-tracker "https://github.com/bohonghuang/nano-towers/issues"
+  :source-control (:git "https://github.com/bohonghuang/nano-towers.git")
   :entry-point "nano-towers:main"
   :defsystem-depends-on (:deploy)
   :build-operation "deploy-op"
