@@ -14,17 +14,14 @@
                      :child (eon:scene2d-box
                              :orientation :vertical
                              :children ((eon:scene2d-margin
-                                         :left 2.0 :right 2.0 :top 2.0 :bottom 2.0
-                                         :child (eon:scene2d-label :string "Title" :name label-title :style (eon:scene2d-label-style :color raylib:+red+)))
+                                         :all 2.0 :child (eon:scene2d-label :string "Title" :name label-title :style (eon:scene2d-label-style :color raylib:+red+)))
                                         (eon:scene2d-margin
-                                         :left 2.0 :right 2.0 :top 2.0 :bottom 8.0
-                                         :child (eon:scene2d-label :string "Message" :name label-message))
+                                         :all 2.0 :child (eon:scene2d-label :string "Message" :name label-message))
                                         (eon:scene2d-margin
-                                         :left 2.0 :right 2.0 :top 2.0 :bottom 2.0
-                                         :child (eon:select-box
-                                                 :layout (T 1)
-                                                 :children ()
-                                                 :name select-box)))))))
+                                         :all 2.0 :child (eon:select-box
+                                                          :layout (T 1)
+                                                          :children ()
+                                                          :name select-box)))))))
   (:constructor (&key (title "Title") (message "Message") (choices '("OK")))
       (let ((window (%make-message-window)))
         (setf (eon:scene2d-label-string (message-window-label-title window)) title
@@ -48,3 +45,12 @@
     (async
       (with-popped-ui (group window)
         (eql (await (eon:select-box-promise-index (message-window-select-box window))) 0)))))
+
+(defun default-window-style ()
+  (eon:scene2d-construct (eon:scene2d-window-style :background (eon:scene2d-rectangle :color (raylib:fade raylib:+black+ 0.5)))))
+
+(defun default-label-style ()
+  (eon:scene2d-construct (eon:scene2d-label-style :color raylib:+raywhite+ :shadow nil :outline raylib:+darkgray+)))
+
+(defun default-select-box-label (string)
+  (eon:scene2d-construct (eon:scene2d-margin :all 2.0 :child (eon:scene2d-label :string string :style (default-label-style)))))

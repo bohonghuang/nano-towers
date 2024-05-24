@@ -35,28 +35,30 @@
                  :alignment (:end :start)
                  :child (eon:scene2d-window
                          :child (eon:scene2d-margin
-                                 :top 2.0 :bottom 2.0 :left 2.0 :right 2.0
+                                 :all 2.0
                                  :child (eon:scene2d-box
                                          :orientation :horizontal
-                                         :children ((eon:scene2d-label :string "$ ")
-                                                    (eon:scene2d-label :string "0" :name label-money))))))
+                                         :children ((eon:scene2d-label :string "$ " :style (default-label-style))
+                                                    (eon:scene2d-label :string "0" :name label-money :style (default-label-style)))))
+                         :style (default-window-style)))
                 (eon:scene2d-cell
                  :name cell-enemy-info
                  :size (#.(float +viewport-width+) #.(float +viewport-height+))
                  :alignment (:end :end)
                  :child (eon:scene2d-window
                          :child (eon:scene2d-margin
-                                 :top 2.0 :bottom 2.0 :left 2.0 :right 2.0
+                                 :all 2.0
                                  :child (eon:scene2d-box
                                          :name enemy-info-box
                                          :orientation :vertical
                                          :alignment (:end :center)
                                          :children ((eon:scene2d-box
                                                      :orientation :horizontal
-                                                     :children ((eon:scene2d-label :string "Wave: ")
-                                                                (eon:scene2d-label :string "0" :name label-wave-number)
-                                                                (eon:scene2d-label :string "/")
-                                                                (eon:scene2d-label :string "0" :name label-wave-count))))))))
+                                                     :children ((eon:scene2d-label :string "Wave: " :style (default-label-style))
+                                                                (eon:scene2d-label :string "0" :name label-wave-number :style (default-label-style))
+                                                                (eon:scene2d-margin :all 1.0 :child (eon:scene2d-label :string "/" :style (default-label-style)))
+                                                                (eon:scene2d-label :string "0" :name label-wave-count :style (default-label-style)))))))
+                         :style (default-window-style)))
                 (eon:scene2d-cell
                  :size (#.(float +viewport-width+) #.(float +viewport-height+))
                  :child (eon:scene2d-label

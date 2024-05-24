@@ -160,7 +160,7 @@
                                             (game-context-enemies context))
                                      :else :if (zerop enemy-desc-index)
                                              :do (let ((box (game-scene-ui-enemy-info-box ui))
-                                                       (label (eon:scene2d-construct (eon:scene2d-label :string ""))))
+                                                       (label (eon:scene2d-construct (eon:scene2d-label :string "" :style (default-label-style)))))
                                                    (async
                                                      (loop :initially (eon:scene2d-box-add-child box label)
                                                            :for time :from (floor interval) :downto 1
@@ -246,8 +246,15 @@
                                                  '(cancel)))
                                     (select-box (eon:scene2d-construct
                                                  (eon:select-box
-                                                  :entries (mapcar #'symbol-name operations))))
-                                    (operation-selector (eon:scene2d-construct (eon:scene2d-window :child select-box))))
+                                                  :entries (mapcar (compose
+                                                                    (lambda (name)
+                                                                      (eon:scene2d-construct
+                                                                       (eon:scene2d-margin :all 2.0 :child (eon:scene2d-label :string name))))
+                                                                    #'symbol-name)
+                                                                   operations))))
+                                    (operation-selector (eon:scene2d-construct
+                                                         (eon:scene2d-window
+                                                          :child (eon:scene2d-margin :all 1.0 :child select-box)))))
                                (raylib:copy-vector2
                                 (tower-screen-position)
                                 (eon:scene2d-position operation-selector))
@@ -265,9 +272,11 @@
                                                      (let ((cell (eon:scene2d-table-add-child
                                                                   table
                                                                   (eon:scene2d-construct
-                                                                   (eon:scene2d-image
-                                                                    :drawable (eon:make-texture-region
-                                                                               :texture (eon:load-asset 'raylib:texture (game-asset (format nil "models/towers/~A.png" (assoc-value model 1))))))))))
+                                                                   (eon:scene2d-margin
+                                                                    :all 2.0
+                                                                    :child (eon:scene2d-image
+                                                                            :drawable (eon:make-texture-region
+                                                                                       :texture (eon:load-asset 'raylib:texture (game-asset (format nil "models/towers/~A.png" (assoc-value model 1)))))))))))
                                                        (setf (eon::scene2d-alignment-vertical
                                                               (eon::scene2d-cell-alignment cell))
                                                              :end))
@@ -275,8 +284,7 @@
                                                       table
                                                       (eon:scene2d-construct
                                                        (eon:scene2d-margin
-                                                        :left 2.0 :right 2.0 :top 2.0 :bottom 2.0
-                                                        :child (eon:scene2d-label :string (format nil "$ ~D" (assoc-value cost 1))))))))
+                                                        :all 2.0 :child (eon:scene2d-label :string (format nil "$ ~D" (assoc-value cost 1))))))))
                                                  (eon:table-select-box table)))
                                              (tower-selector (eon:scene2d-construct
                                                               (eon:scene2d-window :child tower-select-box))))

@@ -126,7 +126,7 @@
                                              :style (eon:scene2d-window-style
                                                      :background (eon:scene2d-rectangle :color (raylib:fade raylib:+black+ 0.5)))
                                              :child (eon:scene2d-margin
-                                                     :top 2.0 :bottom 2.0 :left 2.0 :right 2.0
+                                                     :all 2.0
                                                      :child (eon:select-box
                                                              :name select-box
                                                              :layout (1 T)
@@ -157,9 +157,7 @@ Game assets provided by:
 * Tower Defense Kit by Kenney
 * Flag with Animation by ankousse26
 * 2D Tile Map by inScope"
-                                           :style (eon:scene2d-label-style
-                                                   :color raylib:+raywhite+
-                                                   :shadow nil :outline raylib:+darkgray+))
+                                           :style (default-label-style))
                         (eon:scene2d-margin
                          :top 40.0
                          :child (eon:scene2d-label :string "Thanks for playing!"
