@@ -234,7 +234,7 @@ Game assets provided by:
                                                                          "CONFIRMATION" "Would you like to continue from the highest level you reached last time?"
                                                                          (main-menu-ui-group (main-menu-screen-ui screen)))))
                                                             max-level-reached 1)
-                                             :to 2
+                                             :to 3
                                            :do (maxf max-level-reached i)
                                            :always (await (promise-play-level i))))
                                (await (promise-display-credit))
