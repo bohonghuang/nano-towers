@@ -24,7 +24,10 @@
                                                                                                            :text-style (eon:text-style :size 64.0 :spacing 8.0)
                                                                                                            :color raylib:+raywhite+
                                                                                                            :shadow nil :outline raylib:+darkgray+))
-                                                            (eon:scene2d-margin :top 16.0 :child prompt-label)))))))
+                                                            (eon:scene2d-margin :top 16.0 :child prompt-label))))))
+           (bgm (eon:load-asset 'raylib:music (game-asset #P"audio/game-over.ogg"))))
+      (setf (raylib:music-looping bgm) t
+            (eon:audio-volume bgm) 1.0)
       (setf (raylib:color-a (eon:scene2d-color prompt-label)) 0)
       (eon:scene2d-layout cell)
       (setf (eon:current-screen) (lambda ()
@@ -33,6 +36,7 @@
                                    (eon:scene2d-draw-simple screenshot-2)
                                    (eon:scene2d-draw-simple cell)))
       (async
+        (eon:play-audio bgm)
         (await (eon:promise-tween
                 (ute:timeline
                  (:parallel
@@ -43,7 +47,9 @@
                    :duration 1.0)))))
         (loop :initially (ute:start prompt-tween)
               :until (eq (await (eon:promise-pressed-key)) :a)
-              :finally (ute:kill prompt-tween))))))
+              :finally (ute:kill prompt-tween))
+        (await (eon:promise-fade-audio bgm 0.0))
+        (eon:stop-audio bgm)))))
 
 (defun promise-wait-for-all-enemies-dead (context)
   (promise:with-promise (succeed)
@@ -195,7 +201,8 @@
                      (await (promise-cancel-all-input))))))
         (with-accessors ((money game-context-money)) context
           (setf money (gethash "money" (tiled:properties map)))
-          (let ((focus-manager (loop :for cell :in (tiled:layer-cells (find "ground" (tiled:map-layers map) :key #'tiled:layer-name :test #'string=))
+          (let ((bgm (eon:load-asset 'raylib:music (merge-pathnames (or (gethash "music" (tiled:properties map)) "level.ogg") (game-asset #P"audio/"))))
+                (focus-manager (loop :for cell :in (tiled:layer-cells (find "ground" (tiled:map-layers map) :key #'tiled:layer-name :test #'string=))
                                      :when (gethash "base" (tiled:properties (tiled:cell-tile cell)))
                                        :do (push (make-game-scene-tower
                                                   :scene scene
@@ -212,6 +219,9 @@
                                               :into focusables
                                      :finally (return (eon:make-scene2d-focus-manager :focusables focusables))))
                 (selected-tower nil))
+            (setf (raylib:music-looping bgm) t
+                  (eon:audio-volume bgm) 1.0)
+            (eon:play-audio bgm)
             (flet ((unselect-tower (tower)
                      (setf (game-scene-tower-selectedp tower) nil))
                    (select-tower (tower)
@@ -364,8 +374,10 @@
                             (:b (when wait-cancelers
                                   (when (await (promise-yes-or-no-p "CONFIRMATION" "Do you want the next wave of enemies to come now?" ui-group))
                                     (mapc #'funcall wait-cancelers))))))
+                (await (eon:promise-fade-audio bgm 0.0))
+                (eon:stop-audio bgm)
                 (when (eq (game-context-result context) :failure)
-                  (await (eon:promise-sleep 2.0))
+                  (await (eon:promise-sleep 1.5))
                   (await (promise-cancel-all-input))
                   (await (promise-confirm-game-over)))
                 (loop :for enemy :in (game-context-enemies context)

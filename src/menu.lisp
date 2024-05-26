@@ -155,6 +155,7 @@ Game assets provided by:
 
 * Lowpoly Animated Monsters by quaternius
 * Tower Defense Kit by Kenney
+* FREE Music Loop Bundle by tallbeard
 * Flag with Animation by ankousse26
 * 2D Tile Map by inScope"
                                            :style (default-label-style))
@@ -190,7 +191,11 @@ Game assets provided by:
     (raylib:with-window (+game-title+ (+viewport-width+ +viewport-height+))
       (raylib:set-target-fps 60)
       (eon:with-game-context
-        (let ((screen (make-main-menu-screen)))
+        (let ((screen (make-main-menu-screen))
+              (bgm (eon:load-asset 'raylib:music (game-asset #P"audio/title.ogg"))))
+          (setf (raylib:music-looping bgm) t
+                (eon:audio-volume bgm) 1.0)
+          (eon:play-audio bgm)
           (eon:scene2d-layout (main-menu-screen-ui screen))
           (setf (raylib:color-a (eon:scene2d-color (main-menu-ui-cell (main-menu-screen-ui screen)))) 0)
           (eon:scene2d-layout (main-menu-screen-credit screen))
@@ -228,17 +233,20 @@ Game assets provided by:
                                                :duration 0.5)))))
                     :until (eql index 2)
                     :do (case index
-                          (0 (when (save-screen-excursion
-                                     (loop :for i :from (if (and (> max-level-reached 1)
-                                                                 (await (promise-yes-or-no-p
-                                                                         "CONFIRMATION" "Would you like to continue from the highest level you reached last time?"
-                                                                         (main-menu-ui-group (main-menu-screen-ui screen)))))
-                                                            max-level-reached 1)
-                                             :to 3
-                                           :do (maxf max-level-reached i)
-                                           :always (await (promise-play-level i))))
-                               (await (promise-display-credit))
-                               (setf max-level-reached 1)))
+                          (0
+                           (when (save-screen-excursion
+                                   (prog1 (loop :initially (await (eon:promise-fade-audio bgm 0.0))
+                                                :for i :from (if (and (> max-level-reached 1)
+                                                                      (await (promise-yes-or-no-p
+                                                                              "CONFIRMATION" "Would you like to continue from the highest level you reached last time?"
+                                                                              (main-menu-ui-group (main-menu-screen-ui screen)))))
+                                                                 max-level-reached 1)
+                                                  :to 3
+                                                :do (maxf max-level-reached i)
+                                                :always (await (promise-play-level i)))
+                                     (eon:fade-audio bgm 1.0)))
+                             (await (promise-display-credit))
+                             (setf max-level-reached 1)))
                           (1 (await (promise-display-credit)))))
               (throw 'exit t))))
         (eon:do-screen-loop (eon:make-fit-viewport :width +viewport-width+ :height +viewport-height+))))))
