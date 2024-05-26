@@ -191,7 +191,7 @@
            (async
              (setf (game-context-result context) :failure)
              (await (promise-cancel-all-input))
-             (basic-scene-look-at scene (game-scene-enemy-position enemy))
+             (await (basic-scene-promise-look-at scene (game-scene-enemy-position enemy)))
              (loop :for enemy :in (game-context-enemies context)
                    :do (setf (game-scene-enemy-speed enemy) 0.0))
              (play-sfx (game-scene-audio-attack (game-scene-audio scene)))

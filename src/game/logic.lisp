@@ -117,6 +117,43 @@
     (eon:scene3d-particle-emitter-burst emitter 512)
     emitter))
 
+(defun make-tower-info-window (tower-type &optional (level 1))
+  (eon:scene2d-construct
+   (eon:scene2d-window
+    :child (eon:scene2d-margin
+            :all 4.0
+            :child (flet ((property (name)
+                            (let ((result (getf tower-type name)))
+                              (etypecase result
+                                (list (assoc-value result level))
+                                (atom result)))))
+                     (loop :with table := (eon:scene2d-construct (eon:scene2d-table))
+                           :with rate := (property :rate)
+                           :for name :in '("Attack Power:" "Attack Rate:" "Attack Radius:")
+                           :for key :in '(:power :rate :radius)
+                           :for value := (property key)
+                           :do (eon:scene2d-table-newline table)
+                               (let ((cell (eon:scene2d-table-add-child
+                                            table
+                                            (eon:scene2d-construct
+                                             (eon:scene2d-label :string name :style (default-label-style))))))
+                                 (setf (eon::scene2d-alignment-horizontal (eon::scene2d-cell-alignment cell)) :start))
+                               (eon:scene2d-table-add-child table (eon:scene2d-construct (eon:scene2d-cell :size (8.0 0.0))))
+                               (let ((cell (eon:scene2d-table-add-child
+                                            table
+                                            (eon:scene2d-construct
+                                             (eon:scene2d-label
+                                              :string (if (eql rate t)
+                                                          (case key
+                                                            (:rate "Continuous")
+                                                            (:power (format nil "~A/s" value))
+                                                            (t (princ-to-string value)))
+                                                          (princ-to-string value))
+                                              :style (default-label-style))))))
+                                 (setf (eon::scene2d-alignment-horizontal (eon::scene2d-cell-alignment cell)) :end))
+                           :finally (return table))))
+    :style (default-window-style))))
+
 (defun promise-play-level (&optional (level 1))
   #+sbcl (declare (sb-ext:muffle-conditions style-warning sb-ext:compiler-note))
   (let* ((map (tiled:load-map (game-asset (format nil "maps/level-~D.tmx" level))))
@@ -127,7 +164,8 @@
          (context (game-scene-context scene)))
     (eon:scene2d-layout (game-scene-screen-ui screen))
     (let ((paths (game-scene-map-enemy-paths map))
-          (wait-cancelers nil))
+          (wait-cancelers nil)
+          (tower-info-window nil))
       (loop :with sprites := (eon:array-vector (eon:split-texture (eon:load-asset 'raylib:texture (game-asset #P"flag.png")) '(1 5)))
             :for (path . nil) :in paths
             :for billboard := (eon:make-scene3d-billboard
@@ -147,7 +185,18 @@
                                      :repeat t))))
                   (ute:start timeline))
                 (push billboard (game-context-objects context)))
-      (labels ((promise-display-countdown (interval wait-canceler)
+      (labels ((show-tower-info-window (&rest args)
+                 (setf tower-info-window (eon:scene2d-construct
+                                          (eon:scene2d-cell
+                                           :size (0.0 0.0)
+                                           :alignment (:end :start)
+                                           :position (#.(/ +viewport-width+ 2.0) #.(/ +viewport-height+ 2.0))
+                                           :child (apply #'make-tower-info-window args))))
+                 (eon:scene2d-layout tower-info-window)
+                 (eon:scene2d-group-add-child (game-scene-ui-group ui) tower-info-window))
+               (hide-tower-info-window ()
+                 (eon:scene2d-group-remove-child (game-scene-ui-group ui) (shiftf tower-info-window nil)))
+               (promise-display-countdown (interval wait-canceler)
                  (let ((box (game-scene-ui-enemy-info-box ui))
                        (label (eon:scene2d-construct (eon:scene2d-label :string "" :style (default-label-style)))))
                    (async
@@ -227,7 +276,9 @@
                      (setf (game-scene-tower-selectedp tower) nil))
                    (select-tower (tower)
                      (setf (game-scene-tower-selectedp (setf selected-tower tower)) t)
-                     (basic-scene-look-at scene (game-scene-tower-position tower)))
+                     (async
+                       (await (basic-scene-promise-look-at scene (game-scene-tower-position tower)))
+                       ()))
                    (tower-screen-position (&optional (tower selected-tower))
                      (raylib:get-world-to-screen-ex
                       (game-scene-tower-position tower)
@@ -252,7 +303,10 @@
                 (promise-spawn-enemies)
                 (loop :with ui-group := (game-scene-ui-group (game-scene-screen-ui screen))
                       :with sfx := (eon:load-asset 'raylib:sound (game-asset #P"audio/click-grid.wav"))
-                      :for key := (await (eon:promise-pressed-key))
+                      :for key := (prog2 (when-let ((tower-type (game-scene-tower-type selected-tower)))
+                                           (show-tower-info-window (assoc-value *tower-types* tower-type) (game-scene-tower-level selected-tower)))
+                                      (await (eon:promise-pressed-key))
+                                    (hide-tower-info-window))
                       :until (game-context-result context)
                       :do (play-sfx sfx)
                           (case key
@@ -316,7 +370,18 @@
                                          (tower-screen-position)
                                          (eon:scene2d-position tower-selector))
                                         (with-popped-ui (ui-group tower-selector)
-                                          (when-let ((index (await (select-box-promise-index tower-select-box))))
+                                          (when-let ((index (await (select-box-promise-index
+                                                                    tower-select-box 0
+                                                                    (lambda (manager &optional key)
+                                                                      (if key
+                                                                          (hide-tower-info-window)
+                                                                          (show-tower-info-window
+                                                                           (cdr
+                                                                            (nth
+                                                                             (position
+                                                                              (eon:scene2d-focus-manager-focused manager)
+                                                                              (eon:select-box-entries tower-select-box))
+                                                                             *tower-types*)))))))))
                                             (destructuring-bind (type &key cost &allow-other-keys) (nth index *tower-types*)
                                               (setf cost (assoc-value cost 1))
                                               (if (<= cost money)

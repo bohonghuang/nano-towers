@@ -64,13 +64,13 @@
     (eon:stop-audio sfx))
   (eon:play-audio sfx))
 
-(defun select-box-promise-index (select-box &optional (initial-index 0))
+(defun select-box-promise-index (select-box &optional (initial-index 0) handler)
   (async
     (let ((sfx (eon:load-asset 'raylib:sound (game-asset #P"audio/click.wav"))))
       (prog1 (await (eon:select-box-promise-index
                      select-box initial-index
                      (lambda (manager &optional key)
-                       (declare (ignore manager))
                        (when key (play-sfx sfx))
+                       (when handler (funcall handler manager key))
                        nil)))
         (eon:unload-asset sfx)))))

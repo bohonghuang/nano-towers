@@ -79,6 +79,7 @@
          (offset (raylib:vector3-subtract target (raylib:camera-target camera))))
     (setf (raylib:camera-target camera) target
           (raylib:camera-position camera) (raylib:vector3-add (raylib:camera-position camera) offset))
-    (when tweenp
-      (ute:start tween)
-      (ute::base-tween-update tween single-float-epsilon))))
+    (if tweenp (eon:promise-tween tween) (async))))
+
+(defun basic-scene-promise-look-at (&rest args)
+  (apply #'basic-scene-look-at args))
