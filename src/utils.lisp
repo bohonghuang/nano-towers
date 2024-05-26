@@ -39,9 +39,9 @@
   (promise:with-promise (succeed)
     (eon:add-game-loop-hook
      (lambda ()
-       (if eon::*key-queue*
-           (prog1 (setf eon::*key-queue* nil) (succeed))
-           (push :b eon::*key-queue*)))
+       (if eon::*controller-button-queue*
+           (prog1 (setf eon::*controller-button-queue* nil) (succeed))
+           (push :b eon::*controller-button-queue*)))
      :after #'identity)))
 
 (defun bounding-box-sample (bounding-box &optional (origin (raylib:vector3-zero)) (scale (raylib:vector3-one)))

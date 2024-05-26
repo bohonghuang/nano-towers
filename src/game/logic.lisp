@@ -46,7 +46,7 @@
                    :ease #'ute:bounce-out
                    :duration 1.0)))))
         (loop :initially (ute:start prompt-tween)
-              :until (eq (await (eon:promise-pressed-key)) :a)
+              :until (eq (await (eon:promise-pressed-controller-button)) :a)
               :finally (ute:kill prompt-tween))
         (await (eon:promise-fade-audio bgm 0.0))
         (eon:stop-audio bgm)))))
@@ -331,16 +331,16 @@
                              :duration 0.5))))))
                 (promise-spawn-enemies)
                 (loop :with sfx := (eon:load-asset 'raylib:sound (game-asset #P"audio/click-grid.wav"))
-                      :for key := (prog2 (when-let ((tower-type (game-scene-tower-type selected-tower)))
-                                           (show-tower-info-window (assoc-value *tower-types* tower-type) (game-scene-tower-level selected-tower)))
-                                      (await (eon:promise-pressed-key))
-                                    (hide-tower-info-window))
+                      :for button := (prog2 (when-let ((tower-type (game-scene-tower-type selected-tower)))
+                                              (show-tower-info-window (assoc-value *tower-types* tower-type) (game-scene-tower-level selected-tower)))
+                                         (await (eon:promise-pressed-controller-button))
+                                       (hide-tower-info-window))
                       :until (game-context-result context)
                       :do (play-sfx sfx)
-                          (case key
+                          (case button
                             ((:left :right :up :down)
                              (unselect-tower (eon::scene2d-focusable-content (eon:scene2d-focus-manager-focused focus-manager)))
-                             (eon:scene2d-focus-manager-handle-key focus-manager key)
+                             (eon:scene2d-focus-manager-handle-input focus-manager button)
                              (select-tower (eon::scene2d-focusable-content (eon:scene2d-focus-manager-focused focus-manager))))
                             (:a
                              (let* ((operations (append
