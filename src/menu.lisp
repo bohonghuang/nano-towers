@@ -156,6 +156,7 @@ Game assets provided by:
 * Lowpoly Animated Monsters by quaternius
 * Tower Defense Kit by Kenney
 * FREE Music Loop Bundle by tallbeard
+* Minifantasy - Dungeon Audio Pack by Leohpaz
 * Flag with Animation by ankousse26
 * 2D Tile Map by inScope"
                                            :style (default-label-style))
@@ -192,7 +193,9 @@ Game assets provided by:
       (raylib:set-target-fps 60)
       (eon:with-game-context
         (let ((screen (make-main-menu-screen))
-              (bgm (eon:load-asset 'raylib:music (game-asset #P"audio/title.ogg"))))
+              (bgm (eon:load-asset 'raylib:music (game-asset #P"audio/title.ogg")))
+              (sfx (eon:load-asset 'raylib:sound (game-asset #P"audio/click.wav"))))
+          (declare (ignore sfx))
           (setf (raylib:music-looping bgm) t
                 (eon:audio-volume bgm) 1.0)
           (eon:play-audio bgm)
@@ -223,7 +226,7 @@ Game assets provided by:
                                                    (ute:tween
                                                     :to (((eon:integer-float (raylib:color-a color))) (255.0))
                                                     :duration 0.5)))
-                                        (await (eon:select-box-promise-index
+                                        (await (select-box-promise-index
                                                 (main-menu-ui-select-box
                                                  (main-menu-screen-ui screen))
                                                 (or index 0)))

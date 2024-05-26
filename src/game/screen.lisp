@@ -7,9 +7,21 @@
   (objects nil :type list)
   (result nil :type (member :success :failure nil)))
 
+(defstruct game-scene-audio
+  (hit-1 (eon:load-asset 'raylib:sound (game-asset #P"audio/hit-1.wav")) :type raylib:sound)
+  (hit-2 (eon:load-asset 'raylib:sound (game-asset #P"audio/hit-2.wav")) :type raylib:sound)
+  (build (eon:load-asset 'raylib:sound (game-asset #P"audio/build.wav")) :type raylib:sound)
+  (upgrade (eon:load-asset 'raylib:sound (game-asset #P"audio/upgrade.wav")) :type raylib:sound)
+  (demolish (eon:load-asset 'raylib:sound (game-asset #P"audio/demolish.wav")) :type raylib:sound)
+  (attack (eon:load-asset 'raylib:sound (game-asset #P"audio/attack.wav")) :type raylib:sound)
+  (death (eon:load-asset 'raylib:sound (game-asset #P"audio/death.wav")) :type raylib:sound))
+
+(defvar *game-scene-audio*)
+
 (defclass game-scene (basic-scene)
   ((map-renderer :initarg :map-renderer :initform (eon:tiled-map-renderer (tiled:load-map (game-asset #P"maps/map-1.tmx"))) :type eon:tiled-renderer :accessor game-scene-map-renderer)
-   (context :initarg :context :initform (make-game-context) :type game-context :accessor game-scene-context)))
+   (context :initarg :context :initform (make-game-context) :type game-context :accessor game-scene-context)
+   (audio :initform (make-game-scene-audio) :type game-scene-audio :accessor game-scene-audio)))
 
 (defmethod basic-scene-draw-map ((scene game-scene))
   (rlgl:push-matrix)
@@ -19,7 +31,8 @@
   (rlgl:pop-matrix))
 
 (defmethod basic-scene-draw-objects ((scene game-scene))
-  (let ((context (game-scene-context scene)))
+  (let ((context (game-scene-context scene))
+        (*game-scene-audio* (game-scene-audio scene)))
     (unless (game-context-result context)
       (mapc (rcurry #'game-scene-tower-try-attack (game-context-enemies context)) (game-context-towers context)))
     (eon:scene3d-draw-simple (game-context-towers context))

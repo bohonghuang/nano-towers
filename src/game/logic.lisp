@@ -123,6 +123,7 @@
          (scene (make-instance 'game-scene :map-renderer (eon:tiled-map-renderer map)))
          (screen (make-game-scene-screen :scene scene))
          (ui (game-scene-screen-ui screen))
+         (audio (game-scene-audio scene))
          (context (game-scene-context scene)))
     (eon:scene2d-layout (game-scene-screen-ui screen))
     (let ((paths (game-scene-map-enemy-paths map))
@@ -250,9 +251,11 @@
                              :duration 0.5))))))
                 (promise-spawn-enemies)
                 (loop :with ui-group := (game-scene-ui-group (game-scene-screen-ui screen))
+                      :with sfx := (eon:load-asset 'raylib:sound (game-asset #P"audio/click-grid.wav"))
                       :for key := (await (eon:promise-pressed-key))
                       :until (game-context-result context)
-                      :do (case key
+                      :do (play-sfx sfx)
+                          (case key
                             ((:left :right :up :down)
                              (unselect-tower (eon::scene2d-focusable-content (eon:scene2d-focus-manager-focused focus-manager)))
                              (eon:scene2d-focus-manager-handle-key focus-manager key)
@@ -280,7 +283,7 @@
                                 (eon:scene2d-position operation-selector))
                                (eon:scene2d-layout operation-selector)
                                (with-popped-ui (ui-group operation-selector)
-                                 (when-let ((index (await (eon:select-box-promise-index select-box))))
+                                 (when-let ((index (await (select-box-promise-index select-box))))
                                    (ecase (nth index operations)
                                      (build
                                       (let* ((tower-select-box
@@ -313,7 +316,7 @@
                                          (tower-screen-position)
                                          (eon:scene2d-position tower-selector))
                                         (with-popped-ui (ui-group tower-selector)
-                                          (when-let ((index (await (eon:select-box-promise-index tower-select-box))))
+                                          (when-let ((index (await (select-box-promise-index tower-select-box))))
                                             (destructuring-bind (type &key cost &allow-other-keys) (nth index *tower-types*)
                                               (setf cost (assoc-value cost 1))
                                               (if (<= cost money)
@@ -324,6 +327,7 @@
                                                     (game-scene-tower-update selected-tower)
                                                     (let ((position (game-scene-tower-position selected-tower)))
                                                       (setf (game-scene-tower-type selected-tower) nil)
+                                                      (play-sfx (game-scene-audio-build audio))
                                                       (await
                                                        (eon:promise-tween
                                                         (ute:tween
@@ -345,6 +349,7 @@
                                               (progn
                                                 (decf money cost)
                                                 (incf (game-scene-tower-level selected-tower))
+                                                (play-sfx (game-scene-audio-upgrade audio))
                                                 (let ((emitter (make-tower-upgrade-emitter selected-tower)))
                                                   (push emitter (game-context-objects context))
                                                   (await (eon:promise-sleep 0.5))
@@ -364,6 +369,7 @@
                                           (incf money refund)
                                           (setf (game-scene-tower-level selected-tower) 0
                                                 (game-scene-tower-type selected-tower) nil)
+                                          (play-sfx (game-scene-audio-demolish audio))
                                           (let ((emitter (make-tower-demolish-emitter selected-tower)))
                                             (push emitter (game-context-objects context))
                                             (await (eon:promise-sleep 0.5))
@@ -373,7 +379,8 @@
                                      (cancel))))))
                             (:b (when wait-cancelers
                                   (when (await (promise-yes-or-no-p "CONFIRMATION" "Do you want the next wave of enemies to come now?" ui-group))
-                                    (mapc #'funcall wait-cancelers))))))
+                                    (mapc #'funcall wait-cancelers)))))
+                      :finally (eon:unload-asset sfx))
                 (await (eon:promise-fade-audio bgm 0.0))
                 (eon:stop-audio bgm)
                 (when (eq (game-context-result context) :failure)

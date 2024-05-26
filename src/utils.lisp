@@ -58,3 +58,19 @@
     (when (minusp (-> particle eon::position raylib:y))
       (setf (-> particle eon::position raylib:y) 0.0
             (-> particle eon::position-velocity raylib:y) (* (-> particle eon::position-velocity raylib:y) (- coefficient))))))
+
+(defun play-sfx (sfx)
+  (when (eon:audio-playing-p sfx)
+    (eon:stop-audio sfx))
+  (eon:play-audio sfx))
+
+(defun select-box-promise-index (select-box &optional (initial-index 0))
+  (async
+    (let ((sfx (eon:load-asset 'raylib:sound (game-asset #P"audio/click.wav"))))
+      (prog1 (await (eon:select-box-promise-index
+                     select-box initial-index
+                     (lambda (manager &optional key)
+                       (declare (ignore manager))
+                       (when key (play-sfx sfx))
+                       nil)))
+        (eon:unload-asset sfx)))))

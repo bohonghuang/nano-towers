@@ -37,14 +37,14 @@
     (eon:scene2d-layout window)
     (async
       (with-popped-ui (group window)
-        (await (eon:select-box-promise-index (message-window-select-box window)))))))
+        (await (select-box-promise-index (message-window-select-box window)))))))
 
 (defun promise-yes-or-no-p (title message group)
   (let ((window (make-message-window :title title :message message :choices '("YES" "NO"))))
     (eon:scene2d-layout window)
     (async
       (with-popped-ui (group window)
-        (eql (await (eon:select-box-promise-index (message-window-select-box window))) 0)))))
+        (eql (await (select-box-promise-index (message-window-select-box window))) 0)))))
 
 (defun default-window-style ()
   (eon:scene2d-construct (eon:scene2d-window-style :background (eon:scene2d-rectangle :color (raylib:fade raylib:+black+ 0.5)))))

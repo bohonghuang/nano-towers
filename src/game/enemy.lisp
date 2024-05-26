@@ -194,11 +194,13 @@
              (basic-scene-look-at scene (game-scene-enemy-position enemy))
              (loop :for enemy :in (game-context-enemies context)
                    :do (setf (game-scene-enemy-speed enemy) 0.0))
+             (play-sfx (game-scene-audio-attack (game-scene-audio scene)))
              (await (game-scene-enemy-promise-attack enemy))
              (setf (game-scene-enemy-active-animation enemy) nil))
            nil)
           ((not (plusp (game-scene-enemy-hp enemy)))
            (async
+             (play-sfx (game-scene-audio-death (game-scene-audio scene)))
              (await (game-scene-enemy-promise-die enemy))
              (incf (game-context-money context) (floor (* (game-scene-enemy-base-bounty enemy) (+ (game-scene-enemy-level enemy) 3)) 4))
              (setf (game-scene-enemy-active-animation enemy) nil)
