@@ -62,7 +62,6 @@
                          :child (eon:scene2d-margin
                                  :all 2.0
                                  :child (eon:scene2d-box
-                                         :name enemy-info-box
                                          :orientation :vertical
                                          :alignment (:end :center)
                                          :children ((eon:scene2d-box

@@ -28,7 +28,7 @@
                (when (minusp hp) (setf hp 0.0)))))
       (etypecase (game-scene-tower-attack-rate tower)
         ((eql t)
-         (cobj:with-monotonic-buffer-allocator (:size 64)
+         (cobj:with-monotonic-buffer-allocator ()
            (loop :with source := (position-3d->2d (game-scene-tower-position tower))
                  :and target := (position-3d->2d (game-scene-enemy-position main-enemy))
                  :for enemy :in (or enemies (list main-enemy))
