@@ -56,7 +56,8 @@
     (eon:add-game-loop-hook
      (lambda ()
        (if (game-context-enemies context)
-           (game-context-result context)
+           (when (game-context-result context)
+             (succeed))
            (succeed)))
      :after #'not)))
 
@@ -263,6 +264,8 @@
                                                  (promise-display-countdown (raylib:copy-vector3 (first path)) interval wait-canceler)
                                                  (push wait-canceler wait-cancelers)
                                                  (await (aselect (eon:promise-sleep interval) promise))
+                                                 (unless (promise:done-p promise)
+                                                   (promise:succeed promise))
                                                  (when (member wait-canceler wait-cancelers)
                                                    (funcall wait-canceler))))
                                              (await (eon:promise-sleep interval))))))))
@@ -305,9 +308,7 @@
                      (setf (game-scene-tower-selectedp tower) nil))
                    (select-tower (tower)
                      (setf (game-scene-tower-selectedp (setf selected-tower tower)) t)
-                     (async
-                       (await (basic-scene-promise-look-at scene (game-scene-tower-position tower)))
-                       ()))
+                     (basic-scene-promise-look-at scene (game-scene-tower-position tower)))
                    (tower-screen-position (&optional (tower selected-tower))
                      (raylib:get-world-to-screen-ex
                       (game-scene-tower-position tower)

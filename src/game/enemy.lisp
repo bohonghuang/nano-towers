@@ -206,6 +206,7 @@
              (setf (game-scene-enemy-active-animation enemy) nil)
              (game-context-remove-enemy context enemy))
            nil)
+          ((game-context-result (game-scene-context scene)) nil)
           (t t))))))
 
 (defmethod eon:scene3d-draw ((enemy game-scene-enemy) position origin scale rotation tint)
