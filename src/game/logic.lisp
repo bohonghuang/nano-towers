@@ -294,9 +294,10 @@
                                                               :y (+ (coerce (tiled:cell-row cell) 'single-float) 0.5))))
                                                  (game-context-towers context))
                                        :and :collect (eon::make-scene2d-focusable
-                                                      :focus-point (raylib:make-vector2
-                                                                    :x (coerce (tiled:cell-column cell) 'single-float)
-                                                                    :y (coerce (tiled:cell-row cell) 'single-float))
+                                                      :focal-bound (cons #1=(raylib:make-vector2
+                                                                             :x (coerce (tiled:cell-column cell) 'single-float)
+                                                                             :y (coerce (tiled:cell-row cell) 'single-float))
+                                                                         #1#)
                                                       :content (first (game-context-towers context)))
                                               :into focusables
                                      :finally (return (eon:make-scene2d-focus-manager :focusables focusables))))
