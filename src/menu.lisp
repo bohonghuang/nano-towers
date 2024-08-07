@@ -103,51 +103,51 @@
 
 (define-constant +game-title+ "Nano tOwErs" :test #'string=)
 
-(eon:define-scene2d-constructed main-menu-ui
-    (eon:scene2d-group
-     :name group
-     :children ((eon:scene2d-cell
-                 :name cell
-                 :size (#.(float +viewport-width+) #.(float +viewport-height+))
-                 :child (eon:scene2d-box
-                         :children ((eon:scene2d-margin
-                                     :top 80.0
-                                     :bottom 40.0
-                                     :child (eon:scene2d-label
-                                             :string +game-title+
-                                             :style (eon:scene2d-label-style
-                                                     :text-style (eon:text-style :size 60.0 :spacing 8.0)
-                                                     :color raylib:+white+
-                                                     :shadow nil :outline raylib:+darkgray+)))
-                                    (eon:scene2d-margin
-                                     :top 80.0
-                                     :bottom 80.0
-                                     :child (eon:scene2d-window
-                                             :style (eon:scene2d-window-style
-                                                     :background (eon:scene2d-rectangle :color (raylib:fade raylib:+black+ 0.5)))
-                                             :child (eon:scene2d-margin
-                                                     :all 2.0
-                                                     :child (eon:select-box
-                                                             :name select-box
-                                                             :layout (1 T)
-                                                             :style (eon:select-box-style :entry-type 'select-box-transparency-entry)
-                                                             :children (flet ((label (string)
-                                                                                (eon:scene2d-construct
-                                                                                 (eon:scene2d-max-cell
-                                                                                  :size (256.0 40.0)
-                                                                                  :child (eon:scene2d-label
-                                                                                          :string string
-                                                                                          :style (eon:scene2d-label-style
-                                                                                                  :text-style (eon:text-style :size 30.0 :spacing 4.0)
-                                                                                                  :color raylib:+raywhite+
-                                                                                                  :shadow nil :outline raylib:+darkgray+))))))
-                                                                         (mapcar #'label '("START" "CREDIT" "EXIT")))))))))))))
+(eon:define-scene2d-constructed main-menu-ui ()
+  (eon:scene2d-group
+   :name group
+   :children ((eon:scene2d-cell
+               :name cell
+               :size (#.(float +viewport-width+) #.(float +viewport-height+))
+               :child (eon:scene2d-box
+                       :children ((eon:scene2d-margin
+                                   :top 80.0
+                                   :bottom 40.0
+                                   :child (eon:scene2d-label
+                                           :string +game-title+
+                                           :style (eon:scene2d-label-style
+                                                   :text-style (eon:text-style :size 60.0 :spacing 8.0)
+                                                   :color raylib:+white+
+                                                   :shadow nil :outline raylib:+darkgray+)))
+                                  (eon:scene2d-margin
+                                   :top 80.0
+                                   :bottom 80.0
+                                   :child (eon:scene2d-window
+                                           :style (eon:scene2d-window-style
+                                                   :background (eon:scene2d-rectangle :color (raylib:fade raylib:+black+ 0.5)))
+                                           :child (eon:scene2d-margin
+                                                   :all 2.0
+                                                   :child (eon:select-box
+                                                           :name select-box
+                                                           :layout (1 T)
+                                                           :style (eon:select-box-style :entry-type 'select-box-transparency-entry)
+                                                           :children (flet ((label (string)
+                                                                              (eon:scene2d-construct
+                                                                               (eon:scene2d-max-cell
+                                                                                :size (256.0 40.0)
+                                                                                :child (eon:scene2d-label
+                                                                                        :string string
+                                                                                        :style (eon:scene2d-label-style
+                                                                                                :text-style (eon:text-style :size 30.0 :spacing 4.0)
+                                                                                                :color raylib:+raywhite+
+                                                                                                :shadow nil :outline raylib:+darkgray+))))))
+                                                                       (mapcar #'label '("START" "CREDIT" "EXIT")))))))))))))
 
-(eon:define-scene2d-constructed credit-page
-    (eon:scene2d-max-cell
-     :size (#.(float +viewport-width+) 0.0)
-     :child (eon:scene2d-box
-             :children ((eon:scene2d-label :string "Presented by bohonghuang, for the submission of Spring Lisp Game Jam 2024.
+(eon:define-scene2d-constructed credit-page ()
+  (eon:scene2d-max-cell
+   :size (#.(float +viewport-width+) 0.0)
+   :child (eon:scene2d-box
+           :children ((eon:scene2d-label :string "Presented by bohonghuang, for the submission of Spring Lisp Game Jam 2024.
 
 Powered by the EON framework based on Raylib.
 
@@ -159,14 +159,14 @@ Game assets provided by:
 * Minifantasy - Dungeon Audio Pack by Leohpaz
 * Flag with Animation by ankousse26
 * 2D Tile Map by inScope"
-                                           :style (default-label-style))
-                        (eon:scene2d-margin
-                         :top 40.0
-                         :child (eon:scene2d-label :string "Thanks for playing!"
-                                                   :style (eon:scene2d-label-style
-                                                           :color raylib:+raywhite+
-                                                           :text-style (eon:text-style :size 20.0 :spacing 4.0)
-                                                           :shadow nil :outline raylib:+darkgray+)))))))
+                                         :style (default-label-style))
+                      (eon:scene2d-margin
+                       :top 40.0
+                       :child (eon:scene2d-label :string "Thanks for playing!"
+                                                 :style (eon:scene2d-label-style
+                                                         :color raylib:+raywhite+
+                                                         :text-style (eon:text-style :size 20.0 :spacing 4.0)
+                                                         :shadow nil :outline raylib:+darkgray+)))))))
 
 (defstruct main-menu-screen
   (scene (make-instance 'main-menu-scene) :type main-menu-scene)

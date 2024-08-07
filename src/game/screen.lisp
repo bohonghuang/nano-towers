@@ -40,46 +40,46 @@
     (rlgl:normal3f 0.0 1.0 0.0)
     (eon:scene3d-draw-simple (game-context-objects context))))
 
-(eon:define-scene2d-constructed game-scene-ui
-    (eon:scene2d-group
-     :name group
-     :children ((eon:scene2d-cell
-                 :size (#.(float +viewport-width+) #.(float +viewport-height+))
-                 :alignment (:end :start)
-                 :child (eon:scene2d-window
-                         :child (eon:scene2d-margin
-                                 :all 2.0
-                                 :child (eon:scene2d-box
-                                         :orientation :horizontal
-                                         :children ((eon:scene2d-label :string "$ " :style (default-label-style))
-                                                    (eon:scene2d-label :string "0" :name label-money :style (default-label-style)))))
-                         :style (default-window-style)))
-                (eon:scene2d-cell
-                 :name cell-enemy-info
-                 :size (#.(float +viewport-width+) #.(float +viewport-height+))
-                 :alignment (:end :end)
-                 :child (eon:scene2d-window
-                         :child (eon:scene2d-margin
-                                 :all 2.0
-                                 :child (eon:scene2d-box
-                                         :orientation :vertical
-                                         :alignment (:end :center)
-                                         :children ((eon:scene2d-box
-                                                     :orientation :horizontal
-                                                     :children ((eon:scene2d-label :string "Wave: " :style (default-label-style))
-                                                                (eon:scene2d-label :string "0" :name label-wave-number :style (default-label-style))
-                                                                (eon:scene2d-margin :all 1.0 :child (eon:scene2d-label :string "/" :style (default-label-style)))
-                                                                (eon:scene2d-label :string "0" :name label-wave-count :style (default-label-style)))))))
-                         :style (default-window-style)))
-                (eon:scene2d-cell
-                 :size (#.(float +viewport-width+) #.(float +viewport-height+))
-                 :child (eon:scene2d-label
-                         :name label-level
-                         :string "Level 1"
-                         :style (eon:scene2d-label-style
-                                 :text-style (eon:text-style :size 64.0 :spacing 8.0)
-                                 :color raylib:+raywhite+
-                                 :shadow nil :outline raylib:+darkgray+))))))
+(eon:define-scene2d-constructed game-scene-ui ()
+  (eon:scene2d-group
+   :name group
+   :children ((eon:scene2d-cell
+               :size (#.(float +viewport-width+) #.(float +viewport-height+))
+               :alignment (:end :start)
+               :child (eon:scene2d-window
+                       :child (eon:scene2d-margin
+                               :all 2.0
+                               :child (eon:scene2d-box
+                                       :orientation :horizontal
+                                       :children ((eon:scene2d-label :string "$ " :style (default-label-style))
+                                                  (eon:scene2d-label :string "0" :name label-money :style (default-label-style)))))
+                       :style (default-window-style)))
+              (eon:scene2d-cell
+               :name cell-enemy-info
+               :size (#.(float +viewport-width+) #.(float +viewport-height+))
+               :alignment (:end :end)
+               :child (eon:scene2d-window
+                       :child (eon:scene2d-margin
+                               :all 2.0
+                               :child (eon:scene2d-box
+                                       :orientation :vertical
+                                       :alignment (:end :center)
+                                       :children ((eon:scene2d-box
+                                                   :orientation :horizontal
+                                                   :children ((eon:scene2d-label :string "Wave: " :style (default-label-style))
+                                                              (eon:scene2d-label :string "0" :name label-wave-number :style (default-label-style))
+                                                              (eon:scene2d-margin :all 1.0 :child (eon:scene2d-label :string "/" :style (default-label-style)))
+                                                              (eon:scene2d-label :string "0" :name label-wave-count :style (default-label-style)))))))
+                       :style (default-window-style)))
+              (eon:scene2d-cell
+               :size (#.(float +viewport-width+) #.(float +viewport-height+))
+               :child (eon:scene2d-label
+                       :name label-level
+                       :string "Level 1"
+                       :style (eon:scene2d-label-style
+                               :text-style (eon:text-style :size 64.0 :spacing 8.0)
+                               :color raylib:+raywhite+
+                               :shadow nil :outline raylib:+darkgray+))))))
 
 (defstruct game-scene-screen
   (scene (make-instance 'game-scene) :type game-scene)

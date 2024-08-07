@@ -175,7 +175,7 @@
                                :position (raylib:copy-vector3 (lastcar path))
                                :origin (raylib:make-vector3
                                         :x (/ (eon:texture-region-width (first-elt sprites)) 8.0)
-                                        :y (eon:texture-region-height (first-elt sprites))
+                                        :y 0.0
                                         :z 0.0)
                                :scale (raylib:vector3-scale (raylib:vector3-one) (/ 2.0 (eon:texture-region-height (first-elt sprites)))))
             :do (letrec ((timeline (ute:timeline

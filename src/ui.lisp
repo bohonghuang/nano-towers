@@ -6,31 +6,23 @@
          (progn . ,body)
        (eon:scene2d-group-remove-child ,group ,ui))))
 
-(eon:define-scene2d-constructed message-window
-    (eon:scene2d-cell
-     :size (#.(float +viewport-width+) #.(float +viewport-height+))
-     :child (eon:scene2d-coordinate-truncator
-             :child (eon:scene2d-window
-                     :child (eon:scene2d-box
-                             :orientation :vertical
-                             :children ((eon:scene2d-margin
-                                         :all 2.0 :child (eon:scene2d-label :string "Title" :name label-title :style (eon:scene2d-label-style :color raylib:+red+)))
-                                        (eon:scene2d-margin
-                                         :all 2.0 :child (eon:scene2d-label :string "Message" :name label-message))
-                                        (eon:scene2d-margin
-                                         :all 2.0 :child (eon:select-box
-                                                          :layout (T 1)
-                                                          :children ()
-                                                          :name select-box)))))))
-  (:constructor (&key (title "Title") (message "Message") (choices '("OK")))
-      (let ((window (%make-message-window)))
-        (setf (eon:scene2d-label-string (message-window-label-title window)) title
-              (eon:scene2d-label-string (message-window-label-message window)) message)
-        (dolist (choice choices)
-          (eon:select-box-add-child
-           (message-window-select-box window)
-           (eon:scene2d-construct (eon:scene2d-max-cell :size (64.0 0.0) :child (eon:scene2d-label :string choice)))))
-        window)))
+(eon:define-scene2d-constructed message-window (&key (title "Title") (message "Message") (choices '("OK")))
+  (eon:scene2d-cell
+   :size (#.(float +viewport-width+) #.(float +viewport-height+))
+   :child (eon:scene2d-coordinate-truncator
+           :child (eon:scene2d-window
+                   :child (eon:scene2d-box
+                           :orientation :vertical
+                           :children ((eon:scene2d-margin
+                                       :all 2.0 :child (eon:scene2d-label :string title :name label-title :style (eon:scene2d-label-style :color raylib:+red+)))
+                                      (eon:scene2d-margin
+                                       :all 2.0 :child (eon:scene2d-label :string message :name label-message))
+                                      (eon:scene2d-margin
+                                       :all 2.0 :child (eon:select-box
+                                                        :layout (T 1)
+                                                        :children (loop :for choice :in choices
+                                                                        :collect (eon:scene2d-construct (eon:scene2d-max-cell :size (64.0 0.0) :child (eon:scene2d-label :string choice))))
+                                                        :name select-box))))))))
 
 (defun promise-confirm-message (title message group)
   (let ((window (make-message-window :title title :message message)))
