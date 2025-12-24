@@ -1,7 +1,14 @@
 (in-package #:nano-towers)
 
+(defun take-screenshot ()
+  (eon:load-asset
+   'raylib:image
+   (raylib:render-texture-texture
+    (eon::post-effect-manager-render-texture
+     (eon::post-effect-viewport-manager eon::*screen-manager-viewport*)))))
+
 (defun promise-confirm-game-over ()
-  (let* ((screenshot-1 (eon:take-screenshot))
+  (let* ((screenshot-1 (take-screenshot))
          (screenshot-2 (eon:load-asset 'raylib:image screenshot-1)))
     (raylib:image-blur-gaussian screenshot-1 4)
     (raylib:image-color-grayscale screenshot-1)
@@ -294,10 +301,10 @@
                                                               :y (+ (coerce (tiled:cell-row cell) 'single-float) 0.5))))
                                                  (game-context-towers context))
                                        :and :collect (eon::make-scene2d-focusable
-                                                      :focal-bound (cons #1=(raylib:make-vector2
-                                                                             :x (coerce (tiled:cell-column cell) 'single-float)
-                                                                             :y (coerce (tiled:cell-row cell) 'single-float))
-                                                                         #1#)
+                                                      :focal-bounds (cons #1=(raylib:make-vector2
+                                                                              :x (coerce (tiled:cell-column cell) 'single-float)
+                                                                              :y (coerce (tiled:cell-row cell) 'single-float))
+                                                                          #1#)
                                                       :content (first (game-context-towers context)))
                                               :into focusables
                                      :finally (return (eon:make-scene2d-focus-manager :focusables focusables))))

@@ -252,4 +252,7 @@ Game assets provided by:
                              (setf max-level-reached 1)))
                           (1 (await (promise-display-credit)))))
               (throw 'exit t))))
-        (eon:do-screen-loop (eon:make-fit-viewport :width +viewport-width+ :height +viewport-height+))))))
+        (eon:do-screen-loop
+            (eon:make-post-effect-viewport
+             :viewport (eon:make-fit-viewport :width +viewport-width+ :height +viewport-height+)
+             :width +viewport-width+ :height +viewport-height+))))))

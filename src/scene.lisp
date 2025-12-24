@@ -61,7 +61,7 @@
       (setf (raylib:camera-position light-camera) position)))
   (flet ((render-objects (&aux (eon:*scene3d-camera* (basic-scene-camera scene))) (basic-scene-draw-objects scene)))
     (eon:shadow-map-renderer-render (basic-scene-shadow scene) #'render-objects)
-    (raylib:with-mode-3d (basic-scene-camera scene)
+    (eon:with-camera-3d (basic-scene-camera scene)
       (raylib:with-shader-mode (basic-scene-shader scene)
         (raylib:copy-color raylib:+white+ (basic-scene-col-diffuse scene))
         (update-basic-scene-shader-uniforms scene)
